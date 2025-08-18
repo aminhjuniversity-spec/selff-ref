@@ -1,5 +1,8 @@
 # A Two-Step Concept-Based Approach for Enhanced Interpretability and Trust in Skin Lesion Diagnosis 🩺
 
+[![Journal Paper](https://img.shields.io/badge/Journal_Paper-CSBJ-blue)](https://www.sciencedirect.com/science/article/pii/S2001037025000418)
+[![Cite](https://img.shields.io/badge/Cite-BibTeX-red)](#citation)
+
 Official implementation of the paper [A two-step concept-based approach for enhanced interpretability and trust in skin lesion diagnosis](https://doi.org/10.1016/j.csbj.2025.02.013), CSBJ 2025.
 
 ## Abstract
