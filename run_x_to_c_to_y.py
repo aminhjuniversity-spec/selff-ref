@@ -14,7 +14,7 @@ from src.models.MMed_Llama_3_8B import MMedLlama3
 from src.models.Explicd import Explicd
 from src.models.Mistral import Mistral
 from src.models.GPT4o import GPT4o
-from src.utils import map_label_to_name, load_data, generate_template, convert_numbers_to_concepts, map_letter_to_label, calculate_metrics, save_data_to_json, seed_everything, get_current_date
+from src.utils import map_label_to_name, load_data, generate_template, convert_numbers_to_concepts, map_letter_to_label, calculate_metrics, save_data_to_json, seed_everything, get_current_date, create_explicd_config
 from src.rices import RICES
 
 clinical_concepts = [
@@ -100,17 +100,8 @@ def x_to_c(model_name: str, dataset: str, concept_reference_dict: str, split: in
     elif model_name == "BiomedCLIP":
         model = BiomedCLIP()
     elif model_name == "Explicd":
-    # Self-Refine integration
-    use_self_refine = True  # Set to False for baseline
-    predicted_concepts, _, refinement_info = model.get_concept_predictions_with_self_refine(
-        batch=batch, 
-        config=config,
-        use_self_refine=use_self_refine
-    )
-    
-    # Log refinement statistics
-    if refinement_info is not None:
-        print(f"Image {batch['img_id'][0]}: {refinement_info['initial_violations']} → {refinement_info['final_violations']} violations")
+        config = create_explicd_config(gpu_id=0)
+        model = Explicd(config=config)
 
     # Get concept prompts
     if model_name == "MONET":
@@ -141,7 +132,17 @@ def x_to_c(model_name: str, dataset: str, concept_reference_dict: str, split: in
                 text_input.extend([prompt_template.format(term) for term in concept_reference_dict[concept]])
                 scores.append(model.calculate_similarity(img_batch=imgs, text_batch=text_input))
         elif model_name == "Explicd":
-            predicted_concepts, _ = model.get_concept_predictions(batch=batch, config=config) 
+            # Self-Refine integration
+            use_self_refine = True  # Set to False for baseline
+            predicted_concepts, _, refinement_info = model.get_concept_predictions_with_self_refine(
+                batch=batch, 
+                config=config,
+                use_self_refine=use_self_refine
+            )
+            
+            # Optional: Log refinement statistics
+            if refinement_info is not None:
+                print(f"Image {batch['img_id'][0]}: {refinement_info['initial_violations']} → {refinement_info['final_violations']} violations")
 
         if not raw_values:
             if model_name == "MONET":
@@ -215,7 +216,17 @@ def x_to_c(model_name: str, dataset: str, concept_reference_dict: str, split: in
                     text_input.extend([prompt_template.format(term) for term in concept_reference_dict[concept]])
                     scores.append(model.calculate_similarity(img_batch=imgs, text_batch=text_input))
             elif model_name == "Explicd":
-                predicted_concepts, _ = model.get_concept_predictions(batch=batch, config=config) 
+                # Self-Refine integration
+                use_self_refine = True  # Set to False for baseline
+                predicted_concepts, _, refinement_info = model.get_concept_predictions_with_self_refine(
+                    batch=batch, 
+                    config=config,
+                    use_self_refine=use_self_refine
+                )
+                
+                # Optional: Log refinement statistics
+                if refinement_info is not None:
+                    print(f"Image {batch['img_id'][0]}: {refinement_info['initial_violations']} → {refinement_info['final_violations']} violations")
 
             if not raw_values:
                 if model_name == "MONET":
