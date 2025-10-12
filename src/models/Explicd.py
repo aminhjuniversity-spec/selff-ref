@@ -13,6 +13,10 @@ from PIL import Image
 from torchvision import transforms
 from scipy.special import softmax
 
+# ============ NEW IMPORT FOR SELF-REFINE ============
+from src.self_refine.concept_refiner import ConceptSelfRefine, SimpleRuleBasedRefiner
+# ====================================================
+
 # Get the path to dir_a
 dir_explicd_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../', 'Explicd'))
 
@@ -84,6 +88,55 @@ class Explicd:
             dict_data[img_id] = template.format(*concept_preds)
         
         return dict_data[img_id], raw_scores
+    
+    # ============ NEW METHOD: SELF-REFINE INTEGRATION ============
+    def get_concept_predictions_with_self_refine(self, batch, config, use_self_refine=True, llm_refiner=None):
+        """
+        Get concept predictions with optional Phase 1 Self-Refine.
+        
+        This method wraps the original get_concept_predictions and adds
+        iterative consistency-based refinement.
+        
+        Args:
+            batch: Input batch
+            config: Model configuration
+            use_self_refine: Whether to apply self-refine (default: True)
+            llm_refiner: Optional LLM refiner function (if None, uses rule-based fallback)
+        
+        Returns:
+            Tuple of (refined_concepts_string, raw_scores, refinement_info)
+        """
+        # Step 1: Get initial concept predictions from ExpLICD
+        initial_concepts, raw_scores = self.get_concept_predictions(batch, config)
+        
+        if not use_self_refine:
+            # Return original predictions without refinement
+            return initial_concepts, raw_scores, None
+        
+        # Step 2: Extract diagnosis if present
+        diagnosis = None
+        if "Thus the diagnosis is" in initial_concepts:
+            diagnosis = initial_concepts[initial_concepts.find("Thus the diagnosis is ")+len("Thus the diagnosis is "):-1]
+            concept_only = initial_concepts[:initial_concepts.find("Thus the diagnosis is")].strip()
+        else:
+            concept_only = initial_concepts
+        
+        # Step 3: Initialize Self-Refine
+        if llm_refiner is None:
+            # Use simple rule-based refiner as fallback
+            llm_refiner = SimpleRuleBasedRefiner()
+        
+        refiner = ConceptSelfRefine(
+            llm_refine_fn=llm_refiner,
+            max_iterations=3,
+            verbose=True
+        )
+        
+        # Step 4: Apply Self-Refine
+        refined_concepts, refinement_info = refiner.refine(concept_only, diagnosis=diagnosis)
+        
+        return refined_concepts, raw_scores, refinement_info
+    # ============================================================
     
     def get_concept_predictions_for_a_single_image(self, pil_image):
         template = """The color is {}, the shape is {}, the border is {}, the dermoscopic patterns are {}, the texture is {}, the symmetry is {}, the elevation is {}."""

@@ -100,11 +100,16 @@ def x_to_c(model_name: str, dataset: str, concept_reference_dict: str, split: in
     elif model_name == "BiomedCLIP":
         model = BiomedCLIP()
     elif model_name == "Explicd":
-        from src.utils import create_explicd_config
-        config = create_explicd_config(gpu_id=2)    # TODO: Make this dynamically
-        model = Explicd(config=config)
-    else:
-        raise TypeError(f"The specififed model {model_name} does not have a valid implementation.")
+        use_self_refine = True  # Set to False to disable
+        predicted_concepts, _, refinement_info = model.get_concept_predictions_with_self_refine(
+            batch=batch, 
+            config=config,
+            use_self_refine=use_self_refine
+    )
+    
+    # Optional: Log refinement statistics
+    if refinement_info is not None:
+        print(f"Image {batch['img_id'][0]}: {refinement_info['initial_violations']} → {refinement_info['final_violations']} violations")
 
     # Get concept prompts
     if model_name == "MONET":
