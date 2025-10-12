@@ -100,14 +100,15 @@ def x_to_c(model_name: str, dataset: str, concept_reference_dict: str, split: in
     elif model_name == "BiomedCLIP":
         model = BiomedCLIP()
     elif model_name == "Explicd":
-        use_self_refine = True  # Set to False to disable
-        predicted_concepts, _, refinement_info = model.get_concept_predictions_with_self_refine(
-            batch=batch, 
-            config=config,
-            use_self_refine=use_self_refine
+    # Self-Refine integration
+    use_self_refine = True  # Set to False for baseline
+    predicted_concepts, _, refinement_info = model.get_concept_predictions_with_self_refine(
+        batch=batch, 
+        config=config,
+        use_self_refine=use_self_refine
     )
     
-    # Optional: Log refinement statistics
+    # Log refinement statistics
     if refinement_info is not None:
         print(f"Image {batch['img_id'][0]}: {refinement_info['initial_violations']} → {refinement_info['final_violations']} violations")
 
