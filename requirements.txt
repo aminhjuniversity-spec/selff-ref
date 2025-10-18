@@ -1,22 +1,43 @@
-einops
-matplotlib
-open-clip-torch
-PyYAML
-scikit-image
-scikit-learn
-scipy
-tensorboard
-timm
-tokenizers
-torch
-torchaudio
-torchvision
-tqdm
-transformers
-clip
-pandas
+# Core ML Libraries
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0
+
+# Computer Vision & Image Processing
+opencv-python>=4.8.0
+Pillow>=10.0.0
+timm>=0.9.8
+scikit-image>=0.21.0
+
+# NLP & Transformers
+transformers>=4.35.2
+tokenizers>=0.15.0
+sentencepiece>=0.1.99
+
+# CLIP Models
+open-clip-torch>=2.23.0
+clip @ git+https://github.com/openai/CLIP.git
+
+# Scientific Computing
+numpy>=1.24.0
+scipy>=1.11.0
+pandas>=2.0.0
+scikit-learn>=1.3.0
+
+# Deep Learning Utilities
+einops>=0.7.0
 accelerate>=0.26.0
-opencv-python
-openai
-gradio
-sentencepiece
+
+# Visualization & Logging
+matplotlib>=3.7.0
+tensorboard>=2.14.0
+tqdm>=4.66.0
+
+# Configuration & Utils
+PyYAML>=6.0
+
+# API Clients
+openai>=1.0.0
+
+# Optional (if you want Gradio UI)
+gradio>=4.0.0
