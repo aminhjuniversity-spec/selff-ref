@@ -90,7 +90,11 @@ def x_to_c(model_name: str, dataset: str, concept_reference_dict: str, split: in
         concept_reference_dict = concept_reference_dict_MONET
 
     # Load data
-    train_dataloader, test_dataloader = load_data(dataset=dataset, split=split)
+    train_dataloader, test_dataloader = load_data(
+    dataset=args.dataset, 
+    split=args.split,
+    data_path=getattr(args, 'data_path', None)
+)
 
     # Initialize model
     if model_name == "MONET":
