@@ -184,7 +184,7 @@ def create_explicd_config(gpu_id):
     config.gpu = str(gpu_id)
     config.dataset = "isic2018"
     config.model = "explicd"
-    config.load = "/home/cristiano/phd/2-step-concept-based-skin-diagnosis/checkpoints/explicd_best.pth" #"checkpoints/explicd_best.pth"
+    config.load = "/project/def-arashmoh/shahab33/Medsam/selff-ref/checkpoints/explicd_best.pth" #"checkpoints/explicd_best.pth"
     
     os.environ['CUDA_VISIBLE_DEVICES'] = config.gpu
 
