@@ -138,16 +138,37 @@ def save_dict_to_csv(dataset, model, dict_responses, task, split=None):
 
     print(f"Results saved to {file_path}")
 
-def load_data(dataset:str, split:int):
+def load_data(dataset:str, split:int, data_path:str=None):
+    """Load dataset with configurable data path.
+    
+    Args:
+        dataset: Name of the dataset (PH2, Derm7pt, HAM10000)
+        split: Split number
+        data_path: Base path to data directory (optional)
+    """
+    
+    # Use default path if not provided
+    if data_path is None:
+        data_path = "/project/def-arashmoh/shahab33/Medsam/selff-ref/data"
 
     if dataset == "PH2":
-        dataset_train = PH2Dataset(csv_file=f"data/PH2/splits/PH2_train_split_{split}.csv", img_extension="jpg", path_to_images="data/PH2/images")
-        dataset_test = PH2Dataset(csv_file=f"data/PH2/splits/PH2_test_split_{split}.csv", img_extension="jpg", path_to_images="data/PH2/images")
+        train_csv = os.path.join(data_path, f"PH2/splits/PH2_train_split_{split}.csv")
+        test_csv = os.path.join(data_path, f"PH2/splits/PH2_test_split_{split}.csv")
+        images_path = os.path.join(data_path, "PH2/images")
+        
+        dataset_train = PH2Dataset(csv_file=train_csv, img_extension="jpg", path_to_images=images_path)
+        dataset_test = PH2Dataset(csv_file=test_csv, img_extension="jpg", path_to_images=images_path)
+        
     elif dataset == "Derm7pt":
-        dataset_train = PH2Dataset(csv_file="data/Derm7pt/splits/derm7pt_train.csv", img_extension="jpg", path_to_images="data/Derm7pt/images")
-        dataset_test = PH2Dataset(csv_file="data/Derm7pt/splits/derm7pt_test.csv", img_extension="jpg", path_to_images="data/Derm7pt/images")
+        train_csv = os.path.join(data_path, "Derm7pt/splits/derm7pt_train.csv")
+        test_csv = os.path.join(data_path, "Derm7pt/splits/derm7pt_test.csv")
+        images_path = os.path.join(data_path, "Derm7pt/images")
+        
+        dataset_train = PH2Dataset(csv_file=train_csv, img_extension="jpg", path_to_images=images_path)
+        dataset_test = PH2Dataset(csv_file=test_csv, img_extension="jpg", path_to_images=images_path)
+        
     elif dataset == "HAM10000":
-        metadata_file = "data/HAM10000/splits/metadata_ham10000_gt.csv"
+        metadata_file = os.path.join(data_path, "HAM10000/splits/metadata_ham10000_gt.csv")
         metadata = pd.read_csv(metadata_file)
 
         test_set = metadata[metadata['split'] == 'test']
@@ -156,8 +177,9 @@ def load_data(dataset:str, split:int):
         # Drop lesion Ids from train set that are also in test set
         train_set = train[~train['lesion_id'].isin(test_set['lesion_id'])]
 
-        dataset_train = HAM10000Dataset(root_dir="data/HAM10000/images", metadata=train_set, img_extension='jpg')
-        dataset_test = HAM10000Dataset(root_dir="data/HAM10000/images", metadata=test_set, img_extension='jpg')
+        images_path = os.path.join(data_path, "HAM10000/images")
+        dataset_train = HAM10000Dataset(root_dir=images_path, metadata=train_set, img_extension='jpg')
+        dataset_test = HAM10000Dataset(root_dir=images_path, metadata=test_set, img_extension='jpg')
     else:
         raise ValueError(f"The dataset {dataset} is not implemented.")
 
@@ -184,7 +206,7 @@ def create_explicd_config(gpu_id):
     config.gpu = str(gpu_id)
     config.dataset = "isic2018"
     config.model = "explicd"
-    config.load = "/project/def-arashmoh/shahab33/Medsam/selff-ref/checkpoints/explicd_best.pth" #"checkpoints/explicd_best.pth"
+    config.load = "/project/def-arashmoh/shahab33/Medsam/selff-ref/checkpoints/explicd_best.pth"
     
     os.environ['CUDA_VISIBLE_DEVICES'] = config.gpu
 
