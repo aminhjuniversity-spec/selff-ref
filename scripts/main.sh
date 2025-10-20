@@ -11,7 +11,7 @@
 
 # Load modules
 module load python/3.10
-module load cuda/11.8
+module load cuda/11.8.0
 
 # Activate environment
 source /project/def-arashmoh/shahab33/Medsam/selff-ref/selfrefine_env/bin/activate
