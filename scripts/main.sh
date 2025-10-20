@@ -10,7 +10,7 @@
 #SBATCH --error=/project/def-arashmoh/shahab33/Medsam/selff-ref/logs/selfrefine_%j.err
 
 # Load modules
-module load python/3.10
+module load python/3.11.5
 module load cuda/11.8.0
 
 # Activate environment
