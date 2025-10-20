@@ -1,13 +1,13 @@
 #!/bin/bash
-#SBATCH --job-name=baseline_explicd
+#SBATCH --job-name=selfrefine_test
 #SBATCH --account=def-arashmoh
 #SBATCH --time=03:00:00
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:a100:1
 #SBATCH --cpus-per-task=6
 #SBATCH --mem=32G
-#SBATCH --output=/project/def-arashmoh/shahab33/Medsam/selff-ref/logs/baseline_%j.out
-#SBATCH --error=/project/def-arashmoh/shahab33/Medsam/selff-ref/logs/baseline_%j.err
+#SBATCH --output=/project/def-arashmoh/shahab33/Medsam/selff-ref/logs/selfrefine_%j.out
+#SBATCH --error=/project/def-arashmoh/shahab33/Medsam/selff-ref/logs/selfrefine_%j.err
 
 # Load modules
 module load python/3.10
@@ -21,24 +21,22 @@ cd /project/def-arashmoh/shahab33/Medsam/selff-ref
 
 # Create directories
 mkdir -p logs
-mkdir -p results/baseline_ph2
+mkdir -p results/selfrefine_ph2
 
 echo "========================================="
-echo "Baseline ExpLICD (No Self-Refine) on PH2"
+echo "ExpLICD WITH Self-Refine on PH2"
 echo "Job started: $(date)"
-echo "Node: $(hostname)"
 echo "========================================="
 
 # Set data path
 export DATA_PATH="/project/def-arashmoh/shahab33/Medsam/selff-ref/data"
 
-# IMPORTANT: Temporarily disable Self-Refine in the code
-# You need to set use_self_refine = False in run_x_to_c_to_y.py
+# IMPORTANT: Keep use_self_refine = True in run_x_to_c_to_y.py (current setting)
 
 # Run all 5 splits of PH2
 for split in 0 1 2 3 4; do
     echo "----------------------------------------"
-    echo "Processing PH2 split $split (Baseline)"
+    echo "Processing PH2 split $split (WITH Self-Refine)"
     echo "----------------------------------------"
     
     python run_x_to_c_to_y.py \
@@ -46,25 +44,39 @@ for split in 0 1 2 3 4; do
         --dataset PH2 \
         --split $split \
         --concept_extractor Explicd \
+        --concept_reference_dict PH2 \
         --n_demos 0 \
         --data_path $DATA_PATH \
-        --no_self_refine \
-        --output_dir results/baseline_ph2/split_${split} \
-        2>&1 | tee -a logs/baseline_split_${split}.log
+        2>&1 | tee -a logs/selfrefine_split_${split}.log
     
     echo "Split $split completed at $(date)"
 done
 
 echo "========================================="
-echo "Computing baseline metrics..."
-echo "========================================="
-
-# Calculate average metrics
-python calculate_metrics.py \
-    --results_dir results/baseline_ph2 \
-    --dataset PH2
-
-echo "========================================="
 echo "Job completed: $(date)"
-echo "Total time: $SECONDS seconds"
 echo "========================================="
+```
+
+### **Option 2: Baseline WITHOUT Self-Refine**
+This is for comparison to see how much Self-Refine improves results.
+
+## 📊 **Why Test Both?**
+
+For your paper, you'll want to show:
+1. **Baseline performance** (ExpLICD alone)
+2. **Improved performance** (ExpLICD + Self-Refine)
+3. **The improvement** (how much Self-Refine helps)
+
+## ✅ **What You Should Do:**
+
+Since you want to test your Self-Refine implementation:
+
+1. **Keep** `use_self_refine = True` in `run_x_to_c_to_y.py` (lines 149 & 233)
+2. **Use the "WITH Self-Refine" script above**
+3. **Save it as `main.sh`**
+4. **Run it**: `sbatch main.sh`
+
+This will test your Self-Refine improvements! You'll see output like:
+```
+Image IMD001: 2 → 0 violations
+Image IMD002: 1 → 0 violations
