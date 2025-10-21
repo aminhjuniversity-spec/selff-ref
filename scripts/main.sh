@@ -10,8 +10,9 @@
 #SBATCH --error=/project/def-arashmoh/shahab33/Medsam/selff-ref/logs/selfrefine_%j.err
 
 # Load modules
-module load python/3.10
-module load cuda/11.7  # FIXED: Use available version
+module load python/3.11
+module load cuda/12.6 
+  # FIXED: Use available version
 
 # Activate environment
 source ~/selfrefine_env/bin/activate  # FIXED: Correct path
