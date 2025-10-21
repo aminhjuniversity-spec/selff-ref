@@ -10,11 +10,11 @@
 #SBATCH --error=/project/def-arashmoh/shahab33/Medsam/selff-ref/logs/selfrefine_%j.err
 
 # Load modules
-module load python/3.11.5
-module load cuda/11.8.0
+module load python/3.10
+module load cuda/11.7  # FIXED: Use available version
 
 # Activate environment
-source ~/selfrefine_env/bin/activate
+source ~/selfrefine_env/bin/activate  # FIXED: Correct path
 
 # Change to project directory
 cd /project/def-arashmoh/shahab33/Medsam/selff-ref
@@ -31,9 +31,10 @@ echo "========================================="
 # Set data path
 export DATA_PATH="/project/def-arashmoh/shahab33/Medsam/selff-ref/data"
 
-# IMPORTANT: Keep use_self_refine = True in run_x_to_c_to_y.py (current setting)
+# NOTE: Make sure use_self_refine = True in run_x_to_c_to_y.py
+# This is just a comment, not a command!
 
-# Run all 5 splits of PH2
+# Run all 5 splits
 for split in 0 1 2 3 4; do
     echo "----------------------------------------"
     echo "Processing PH2 split $split (WITH Self-Refine)"
@@ -55,28 +56,3 @@ done
 echo "========================================="
 echo "Job completed: $(date)"
 echo "========================================="
-```
-
-### **Option 2: Baseline WITHOUT Self-Refine**
-This is for comparison to see how much Self-Refine improves results.
-
-## 📊 **Why Test Both?**
-
-For your paper, you'll want to show:
-1. **Baseline performance** (ExpLICD alone)
-2. **Improved performance** (ExpLICD + Self-Refine)
-3. **The improvement** (how much Self-Refine helps)
-
-## ✅ **What You Should Do:**
-
-Since you want to test your Self-Refine implementation:
-
-1. **Keep** `use_self_refine = True` in `run_x_to_c_to_y.py` (lines 149 & 233)
-2. **Use the "WITH Self-Refine" script above**
-3. **Save it as `main.sh`**
-4. **Run it**: `sbatch main.sh`
-
-This will test your Self-Refine improvements! You'll see output like:
-```
-Image IMD001: 2 → 0 violations
-Image IMD002: 1 → 0 violations
