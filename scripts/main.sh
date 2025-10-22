@@ -15,7 +15,8 @@ module load cuda/12.6
   # FIXED: Use available version
 
 # Activate environment
-source ~/selfrefine_env/bin/activate  # FIXED: Correct path
+source /project/def-arashmoh/shahab33/Medsam/self/bin/activate
+ 
 
 # Change to project directory
 cd /project/def-arashmoh/shahab33/Medsam/selff-ref
