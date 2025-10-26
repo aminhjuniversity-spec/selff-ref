@@ -15,7 +15,7 @@ module load cuda/12.6
 module load opencv/4.12.0
 
 # Activate environment
-source /project/def-arashmoh/shahab33/Medsam/self_with_cv/bin/activate
+source /project/def-arashmoh/shahab33/Medsam/selfrefine_env/bin/activate
 
  
 
