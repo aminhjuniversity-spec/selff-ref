@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=selfrefine_test
+#SBATCH --job-name=selfrefine_
 #SBATCH --account=def-arashmoh
 #SBATCH --time=03:00:00
 #SBATCH --nodes=1
