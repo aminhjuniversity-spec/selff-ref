@@ -12,7 +12,7 @@
 # Load modules
 module load python/3.11
 module load cuda/12.6 
-  # FIXED: Use available version
+module load opencv/4.12.0
 
 # Activate environment
 source /project/def-arashmoh/shahab33/Medsam/self/bin/activate
