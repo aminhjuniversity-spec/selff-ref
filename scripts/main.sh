@@ -16,7 +16,8 @@ module load python/3.11
 module load cuda/12.6 
 
 # Activate environment
-/project/def-arashmoh/shahab33/Medsam/self/bin/activate
+source /project/def-arashmoh/shahab33/Medsam/self/bin/activate
+
  
 # Change to project directory
 cd /project/def-arashmoh/shahab33/Medsam/selff-ref
