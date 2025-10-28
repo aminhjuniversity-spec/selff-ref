@@ -9,12 +9,12 @@
 #SBATCH --output=/project/def-arashmoh/shahab33/Medsam/selff-ref/logs/selfrefine_%j.out
 #SBATCH --error=/project/def-arashmoh/shahab33/Medsam/selff-ref/logs/selfrefine_%j.err
 
-# Load modules
-module load opencv/4.12.0
-module load rust
+# Load modules (as per cluster documentation)
+module load gcc
 module load python/3.11
-module load cuda/12.6 
-
+module load cuda/12.6  # Keep this for your GPU job
+module load opencv/4.12.0
+module load scipy-stack # Recommended by docs, provides many scientific packages
 # Activate environment
 source /project/def-arashmoh/shahab33/Medsam/self/bin/activate
 
