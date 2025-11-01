@@ -52,8 +52,7 @@ echo ""
 python "violation comparison.py" \
     --dataset PH2 \
     --split 0 \
-    --num_samples 10 \
-    --data_path $DATA_PATH
+    --num_samples 10
 
 EXIT_CODE=$?
 
