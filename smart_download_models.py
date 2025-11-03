@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """
-ALL-IN-ONE Model Setup Script
+ALL-IN-ONE Model Setup Script (Fixed)
 Downloads all models to checkpoints/ and sets up cache.
-Run this on the LOGIN NODE (which has internet access).
-
-Usage: python setup_all_models.py
+Run this on the LOGIN NODE.
 """
 
 import os
@@ -31,10 +29,7 @@ print(f"Project: {project_dir}")
 print(f"Checkpoints: {checkpoint_dir}")
 print()
 
-# Set environment to use checkpoints as cache location
-os.environ['HF_HOME'] = str(checkpoint_dir / "huggingface_cache")
-os.environ['TORCH_HOME'] = str(checkpoint_dir / "torch_cache")
-
+# DON'T set HF_HOME here - let libraries use default cache first
 print("=" * 80)
 print("STEP 1: Downloading Models to checkpoints/")
 print("=" * 80)
@@ -52,7 +47,7 @@ try:
         size = (biomedclip_dir / 'open_clip_pytorch_model.bin').stat().st_size / (1024**3)
         print(f"      Size: {size:.2f} GB")
     else:
-        print("      Downloading to checkpoints/BiomedCLIP/")
+        print("      Downloading to HuggingFace cache first...")
         print("      Size: ~1.5 GB (may take 5-10 minutes)")
         
         from open_clip import create_model_from_pretrained
@@ -65,28 +60,22 @@ try:
     # ========================================================================
     # MODEL 2: BiomedBERT
     # ========================================================================
-    biomedbert_dir = checkpoint_dir / "BiomedBERT"
-    biomedbert_dir.mkdir(exist_ok=True)
-    
     print("[2/4] BiomedBERT")
-    print("      Downloading to checkpoints/BiomedBERT/")
+    print("      Downloading to HuggingFace cache...")
     print("      Size: ~500 MB")
     
     from transformers import AutoConfig, AutoTokenizer, AutoModel
     
     config = AutoConfig.from_pretrained(
-        "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract",
-        cache_dir=str(biomedbert_dir)
+        "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract"
     )
     
     tokenizer = AutoTokenizer.from_pretrained(
-        "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract",
-        cache_dir=str(biomedbert_dir)
+        "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract"
     )
     
     model = AutoModel.from_pretrained(
-        "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract",
-        cache_dir=str(biomedbert_dir)
+        "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract"
     )
     
     print("      ✓ Downloaded successfully")
@@ -95,20 +84,12 @@ try:
     # ========================================================================
     # MODEL 3: ViT
     # ========================================================================
-    vit_dir = checkpoint_dir / "ViT"
-    vit_dir.mkdir(exist_ok=True)
-    
     print("[3/4] Vision Transformer (ViT)")
-    print("      Downloading to checkpoints/ViT/")
+    print("      Downloading to torch cache...")
     print("      Size: ~343 MB")
     
     import timm
-    import torch
-    
     vit = timm.create_model('vit_base_patch16_224.orig_in21k', pretrained=True)
-    
-    vit_file = vit_dir / "vit_base_patch16_224.orig_in21k.pth"
-    torch.save(vit.state_dict(), vit_file)
     
     print("      ✓ Downloaded successfully")
     print()
@@ -126,14 +107,59 @@ try:
     else:
         print("      ✗ NOT FOUND: checkpoints/explicd_best.pth")
         print("      Please download from: https://github.com/yhygao/Explicd")
-        print("      (This script will continue anyway)")
     print()
     
     # ========================================================================
-    # STEP 2: Setup Cache Links
+    # STEP 2: Copy to checkpoints/
     # ========================================================================
     print("=" * 80)
-    print("STEP 2: Setting Up Cache to Use checkpoints/")
+    print("STEP 2: Organizing Models in checkpoints/")
+    print("=" * 80)
+    print()
+    
+    # Copy BiomedBERT to checkpoints
+    print("[1/3] Copying BiomedBERT to checkpoints/...")
+    biomedbert_dir = checkpoint_dir / "BiomedBERT"
+    biomedbert_dir.mkdir(exist_ok=True)
+    
+    if (hf_cache / "models--microsoft--BiomedNLP-BiomedBERT-base-uncased-abstract").exists():
+        import shutil
+        src = hf_cache / "models--microsoft--BiomedNLP-BiomedBERT-base-uncased-abstract"
+        # Find files and copy
+        for file in src.rglob("*"):
+            if file.is_file() and file.suffix in ['.json', '.bin', '.txt', '.safetensors']:
+                dst = biomedbert_dir / file.name
+                if not dst.exists():
+                    shutil.copy2(file, dst)
+        print("      ✓ BiomedBERT copied to checkpoints/BiomedBERT/")
+    print()
+    
+    # Copy ViT to checkpoints
+    print("[2/3] Copying ViT to checkpoints/...")
+    vit_dir = checkpoint_dir / "ViT"
+    vit_dir.mkdir(exist_ok=True)
+    
+    torch_cache_path = Path.home() / ".cache/torch/hub/checkpoints"
+    if torch_cache_path.exists():
+        import shutil
+        for file in torch_cache_path.glob("*vit*.safetensors"):
+            dst = vit_dir / file.name
+            if not dst.exists():
+                shutil.copy2(file, dst)
+        print("      ✓ ViT copied to checkpoints/ViT/")
+    print()
+    
+    # BiomedCLIP already in checkpoints
+    print("[3/3] BiomedCLIP...")
+    if biomedclip_dir.exists():
+        print("      ✓ Already in checkpoints/BiomedCLIP/")
+    print()
+    
+    # ========================================================================
+    # STEP 3: Setup Cache Links
+    # ========================================================================
+    print("=" * 80)
+    print("STEP 3: Setting Up Cache to Use checkpoints/")
     print("=" * 80)
     print()
     
@@ -162,12 +188,7 @@ try:
     biomedbert_cache.mkdir(parents=True, exist_ok=True)
     
     if biomedbert_dir.exists():
-        model_files = list(biomedbert_dir.rglob("*.json")) + \
-                      list(biomedbert_dir.rglob("*.bin")) + \
-                      list(biomedbert_dir.rglob("*.txt")) + \
-                      list(biomedbert_dir.rglob("*.safetensors"))
-        
-        for file in model_files:
+        for file in biomedbert_dir.glob("*"):
             if file.is_file():
                 dst = biomedbert_cache / file.name
                 if dst.exists() or dst.is_symlink():
@@ -262,15 +283,11 @@ except Exception as e:
     print("❌ ERROR")
     print("=" * 80)
     print(f"\n{e}\n")
-    print("Troubleshooting:")
-    print("  1. Make sure you're on a LOGIN NODE (not compute node)")
-    print("     Run: hostname")
-    print("     Should NOT show 'ng' prefix")
-    print()
+    import traceback
+    traceback.print_exc()
+    print("\nTroubleshooting:")
+    print("  1. Make sure you're on a LOGIN NODE")
     print("  2. Check internet connection")
-    print("     Run: ping -c 3 google.com")
-    print()
     print("  3. Check available space")
-    print("     Run: df -h /project/def-arashmoh/")
     print()
     sys.exit(1)
