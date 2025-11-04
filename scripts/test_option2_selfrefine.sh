@@ -3,7 +3,7 @@
 #SBATCH --account=def-arashmoh
 #SBATCH --time=02:00:00
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:a100:1
+#SBATCH --gres=gpu:h100:1
 #SBATCH --cpus-per-task=6
 #SBATCH --mem=32G
 #SBATCH --output=/project/def-arashmoh/shahab33/Medsam/selff-ref/logs/test_option2_%j.out
