@@ -51,11 +51,10 @@ echo "========================================="
 echo ""
 
 # Run Option 2 test using existing script name
-python "comparison.py" \
+python comparison.py \
     --dataset PH2 \
     --split 0 \
-    --data_path $DATA_PATH \
-    --output_dir results/comparison_reports
+    --data_path $DATA_PATH
 
 EXIT_CODE=$?
 
