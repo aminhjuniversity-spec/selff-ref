@@ -1,5 +1,5 @@
 """
-Path D: Full Dataset Violation Comparison WITH mmed SUPPORT
+Path D: Full Dataset Violation Comparison WITH Mmed SUPPORT
 Runs self-refine evaluation on ENTIRE test sets for all datasets.
 
 NEW: Supports both rule-based and LLM-based refinement for comparison.
