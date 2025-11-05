@@ -11,16 +11,18 @@ from pathlib import Path
 
 
 def load_results():
-    """Load both rule-based and LLM-based results."""
+    """Load both rule-based and MMed-LLM results."""
     results_dir = Path("results/path_d_full_evaluation")
     
     # Try to load consolidated results
     rulebased_file = results_dir / "CONSOLIDATED_RESULTS_rulebased.json"
+    mmed_file = results_dir / "CONSOLIDATED_RESULTS_mmed.json"
+    # Also check for generic llm file (if using GPT)
     llm_file = results_dir / "CONSOLIDATED_RESULTS_llm.json"
     
     results = {
         'rulebased': {},
-        'llm': {}
+        'llm': {}  # Will contain MMed or GPT results
     }
     
     if rulebased_file.exists():
@@ -30,12 +32,17 @@ def load_results():
     else:
         print("⚠ Rule-based results not found")
     
-    if llm_file.exists():
+    # Try MMed first, then generic LLM
+    if mmed_file.exists():
+        with open(mmed_file, 'r') as f:
+            results['llm'] = json.load(f)
+        print("✓ Loaded MMed-LLM results")
+    elif llm_file.exists():
         with open(llm_file, 'r') as f:
             results['llm'] = json.load(f)
         print("✓ Loaded LLM results")
     else:
-        print("⚠ LLM results not found")
+        print("⚠ LLM results not found (neither MMed nor GPT)")
     
     return results
 
@@ -63,9 +70,15 @@ def create_comparison_table(results):
         if rb_key not in results['rulebased']:
             rb_key = f"{dataset}_rulebased"
         
-        llm_key = f"{dataset}_llm"
+        # Try different LLM key formats (mmed, llm, gpt-4o-mini, etc.)
+        llm_key = None
+        for suffix in ['_mmed', '_llm', '_gpt-4o-mini', '_gpt-4o']:
+            test_key = f"{dataset}{suffix}"
+            if test_key in results['llm']:
+                llm_key = test_key
+                break
         
-        if rb_key in results['rulebased'] and llm_key in results['llm']:
+        if rb_key in results['rulebased'] and llm_key and llm_key in results['llm']:
             rb_data = results['rulebased'][rb_key]
             llm_data = results['llm'][llm_key]
             
@@ -116,9 +129,15 @@ def plot_comparison(results):
         if rb_key not in results['rulebased']:
             rb_key = f"{dataset}_rulebased"
         
-        llm_key = f"{dataset}_llm"
+        # Try different LLM key formats
+        llm_key = None
+        for suffix in ['_mmed', '_llm', '_gpt-4o-mini', '_gpt-4o']:
+            test_key = f"{dataset}{suffix}"
+            if test_key in results['llm']:
+                llm_key = test_key
+                break
         
-        if rb_key in results['rulebased'] and llm_key in results['llm']:
+        if rb_key in results['rulebased'] and llm_key and llm_key in results['llm']:
             datasets.append(dataset)
             rulebased_reductions.append(results['rulebased'][rb_key]['reduction_percentage'])
             llm_reductions.append(results['llm'][llm_key]['reduction_percentage'])
@@ -133,7 +152,7 @@ def plot_comparison(results):
     bars1 = ax.bar(x - width/2, rulebased_reductions, width, 
                    label='Rule-Based', color='#e74c3c', alpha=0.8, edgecolor='black', linewidth=1.5)
     bars2 = ax.bar(x + width/2, llm_reductions, width,
-                   label='LLM-Based (GPT-4o)', color='#2ecc71', alpha=0.8, edgecolor='black', linewidth=1.5)
+                   label='LLM-Based (MMed-Llama-3-8B)', color='#2ecc71', alpha=0.8, edgecolor='black', linewidth=1.5)
     
     # Customize
     ax.set_xlabel('Dataset', fontsize=14, fontweight='bold')
@@ -185,9 +204,15 @@ def generate_statistics(results):
         if rb_key not in results['rulebased']:
             rb_key = f"{dataset}_rulebased"
         
-        llm_key = f"{dataset}_llm"
+        # Try different LLM key formats
+        llm_key = None
+        for suffix in ['_mmed', '_llm', '_gpt-4o-mini', '_gpt-4o']:
+            test_key = f"{dataset}{suffix}"
+            if test_key in results['llm']:
+                llm_key = test_key
+                break
         
-        if rb_key in results['rulebased'] and llm_key in results['llm']:
+        if rb_key in results['rulebased'] and llm_key and llm_key in results['llm']:
             rb_reductions.append(results['rulebased'][rb_key]['reduction_percentage'])
             llm_reductions.append(results['llm'][llm_key]['reduction_percentage'])
     
