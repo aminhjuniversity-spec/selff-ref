@@ -18,11 +18,12 @@ from datetime import datetime
 from src.models.Explicd import Explicd
 from src.utils import create_explicd_config, load_data
 
-# NEW: Import LLM refiner
-from llm_refiner import LLMBasedRefiner
+# NEW: Import LLM refiners
+from mmed_refiner import MMedBasedRefiner  # FREE - runs on cluster
+# from llm_refiner import LLMBasedRefiner  # PAID - OpenAI API (optional)
 
 
-def evaluate_full_dataset(dataset, split=None, data_path=None, use_llm=False, llm_model="gpt-4o-mini"):
+def evaluate_full_dataset(dataset, split=None, data_path=None, use_llm=False, llm_model="MMed"):
     """
     Evaluate self-refine on complete test set.
     
@@ -31,9 +32,9 @@ def evaluate_full_dataset(dataset, split=None, data_path=None, use_llm=False, ll
         split: Split number (only for PH2)
         data_path: Path to data directory
         use_llm: Whether to use LLM-based refinement (default: False = rule-based)
-        llm_model: Which OpenAI model to use if use_llm=True
+        llm_model: Which LLM to use if use_llm=True ("MMed", "gpt-4o-mini", "gpt-4o")
     """
-    refiner_type = "LLM" if use_llm else "Rule-Based"
+    refiner_type = f"LLM-{llm_model}" if use_llm else "Rule-Based"
     
     print("\n" + "=" * 80)
     print(f"Path D Evaluation: {dataset}" + (f" Split {split}" if split is not None else ""))
@@ -48,7 +49,16 @@ def evaluate_full_dataset(dataset, split=None, data_path=None, use_llm=False, ll
     # Initialize LLM refiner if requested
     if use_llm:
         print(f"[1/4] Initializing LLM refiner: {llm_model}...")
-        llm_refiner = LLMBasedRefiner(model=llm_model)
+        
+        if llm_model == "MMed":
+            # Use MMed-LLM (FREE - runs on cluster)
+            llm_refiner = MMedBasedRefiner(ckpt="Henrychur/MMed-Llama-3-8B")
+        elif llm_model.startswith("gpt"):
+            # Use OpenAI GPT (PAID - requires API key)
+            from llm_refiner import LLMBasedRefiner
+            llm_refiner = LLMBasedRefiner(model=llm_model)
+        else:
+            raise ValueError(f"Unknown LLM model: {llm_model}")
     else:
         llm_refiner = None
     
@@ -159,7 +169,11 @@ def evaluate_full_dataset(dataset, split=None, data_path=None, use_llm=False, ll
     os.makedirs(output_dir, exist_ok=True)
     
     # File naming includes refiner type
-    refiner_suffix = "_llm" if use_llm else "_rulebased"
+    if use_llm:
+        refiner_suffix = f"_{llm_model.lower()}"
+    else:
+        refiner_suffix = "_rulebased"
+    
     if split is not None:
         output_file = f"{output_dir}/{dataset}_split_{split}{refiner_suffix}_full_results.json"
     else:
@@ -193,15 +207,15 @@ def evaluate_full_dataset(dataset, split=None, data_path=None, use_llm=False, ll
     return results
 
 
-def evaluate_all_datasets(use_llm=False, llm_model="gpt-4o-mini"):
+def evaluate_all_datasets(use_llm=False, llm_model="MMed"):
     """
     Run Path D evaluation on ALL datasets and splits.
     
     Args:
         use_llm: Whether to use LLM-based refinement
-        llm_model: Which OpenAI model to use
+        llm_model: Which LLM to use ("MMed", "gpt-4o-mini", "gpt-4o")
     """
-    refiner_type = "LLM" if use_llm else "Rule-Based"
+    refiner_type = f"LLM-{llm_model}" if use_llm else "Rule-Based"
     
     print("\n" + "=" * 80)
     print("PATH D: COMPREHENSIVE EVALUATION")
@@ -246,7 +260,11 @@ def evaluate_all_datasets(use_llm=False, llm_model="gpt-4o-mini"):
     all_results[key] = results['summary']
     
     # Save consolidated results
-    refiner_suffix = "_llm" if use_llm else "_rulebased"
+    if use_llm:
+        refiner_suffix = f"_{llm_model.lower()}"
+    else:
+        refiner_suffix = "_rulebased"
+    
     output_file = f"results/path_d_full_evaluation/CONSOLIDATED_RESULTS{refiner_suffix}.json"
     with open(output_file, 'w') as f:
         json.dump(all_results, f, indent=2)
@@ -279,9 +297,9 @@ if __name__ == "__main__":
     # NEW: LLM options
     parser.add_argument('--use_llm', action='store_true',
                         help='Use LLM-based refinement instead of rule-based')
-    parser.add_argument('--llm_model', type=str, default='gpt-4o-mini',
-                        choices=['gpt-4o-mini', 'gpt-4o'],
-                        help='Which OpenAI model to use (gpt-4o-mini is cheaper)')
+    parser.add_argument('--llm_model', type=str, default='MMed',
+                        choices=['MMed', 'gpt-4o-mini', 'gpt-4o'],
+                        help='Which LLM to use (MMed is free, GPT requires API key)')
     
     args = parser.parse_args()
     
