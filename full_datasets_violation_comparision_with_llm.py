@@ -3,6 +3,7 @@ Path D: Full Dataset Violation Comparison WITH Mmed SUPPORT
 Runs self-refine evaluation on ENTIRE test sets for all datasets.
 
 NEW: Supports both rule-based and LLM-based refinement for comparison.
+MODIFIED: Added --max_samples parameter for debugging on smaller subsets
 """
 
 import sys
@@ -23,9 +24,9 @@ from mmed_refiner import MMedBasedRefiner  # FREE - runs on cluster
 # from llm_refiner import LLMBasedRefiner  # PAID - OpenAI API (optional)
 
 
-def evaluate_full_dataset(dataset, split=None, data_path=None, use_llm=False, llm_model="MMed"):
+def evaluate_full_dataset(dataset, split=None, data_path=None, use_llm=False, llm_model="MMed", max_samples=None):
     """
-    Evaluate self-refine on complete test set.
+    Evaluate self-refine on complete test set (or subset for debugging).
     
     Args:
         dataset: Dataset name (PH2, Derm7pt, HAM10000)
@@ -33,12 +34,15 @@ def evaluate_full_dataset(dataset, split=None, data_path=None, use_llm=False, ll
         data_path: Path to data directory
         use_llm: Whether to use LLM-based refinement (default: False = rule-based)
         llm_model: Which LLM to use if use_llm=True ("MMed", "gpt-4o-mini", "gpt-4o")
+        max_samples: Maximum number of samples to process (None = all, for debugging use 100)
     """
     refiner_type = f"LLM-{llm_model}" if use_llm else "Rule-Based"
     
     print("\n" + "=" * 80)
     print(f"Path D Evaluation: {dataset}" + (f" Split {split}" if split is not None else ""))
     print(f"Refiner: {refiner_type} ({llm_model if use_llm else 'SimpleRuleBasedRefiner'})")
+    if max_samples:
+        print(f"🔍 DEBUG MODE: Processing first {max_samples} samples only")
     print("=" * 80)
     
     # Load config and model
@@ -74,7 +78,14 @@ def evaluate_full_dataset(dataset, split=None, data_path=None, use_llm=False, ll
     )
     
     test_size = len(test_dataloader)
-    print(f"      Test set size: {test_size} samples")
+    
+    # Apply max_samples limit if specified
+    if max_samples:
+        test_size = min(test_size, max_samples)
+        print(f"      Full test set size: {len(test_dataloader)} samples")
+        print(f"      Processing first: {test_size} samples (DEBUG MODE)")
+    else:
+        print(f"      Test set size: {test_size} samples")
     
     # Storage for results
     results = {
@@ -84,18 +95,23 @@ def evaluate_full_dataset(dataset, split=None, data_path=None, use_llm=False, ll
         'llm_model': llm_model if use_llm else None,
         'timestamp': datetime.now().isoformat(),
         'test_size': test_size,
+        'max_samples_limit': max_samples,
         'samples': []
     }
     
-    print("\n[3/4] Processing all samples...")
+    print("\n[3/4] Processing samples...")
     print("-" * 80)
     
     violation_reduction_count = 0
     total_baseline_violations = 0
     total_refined_violations = 0
     
-    # Process ALL samples in test set
-    for batch in tqdm(test_dataloader, desc="Processing"):
+    # Process samples (limited to max_samples if specified)
+    for idx, batch in enumerate(tqdm(test_dataloader, desc="Processing", total=test_size)):
+        # Stop if we've reached max_samples
+        if max_samples and idx >= max_samples:
+            break
+        
         img_id = batch['img_id'][0]
         
         # Baseline (no self-refine)
@@ -168,16 +184,18 @@ def evaluate_full_dataset(dataset, split=None, data_path=None, use_llm=False, ll
     output_dir = "results/path_d_full_evaluation"
     os.makedirs(output_dir, exist_ok=True)
     
-    # File naming includes refiner type
+    # File naming includes refiner type and debug suffix if applicable
     if use_llm:
         refiner_suffix = f"_{llm_model.lower()}"
     else:
         refiner_suffix = "_rulebased"
     
+    debug_suffix = f"_debug{max_samples}" if max_samples else ""
+    
     if split is not None:
-        output_file = f"{output_dir}/{dataset}_split_{split}{refiner_suffix}_full_results.json"
+        output_file = f"{output_dir}/{dataset}_split_{split}{refiner_suffix}{debug_suffix}_full_results.json"
     else:
-        output_file = f"{output_dir}/{dataset}{refiner_suffix}_full_results.json"
+        output_file = f"{output_dir}/{dataset}{refiner_suffix}{debug_suffix}_full_results.json"
     
     with open(output_file, 'w') as f:
         json.dump(results, f, indent=2)
@@ -190,7 +208,7 @@ def evaluate_full_dataset(dataset, split=None, data_path=None, use_llm=False, ll
     print("=" * 80)
     print(f"\nDataset: {dataset}" + (f" Split {split}" if split is not None else ""))
     print(f"Refiner: {refiner_type}")
-    print(f"Test Size: {test_size} samples")
+    print(f"Test Size: {test_size} samples" + (f" (DEBUG: limited from {len(test_dataloader)})" if max_samples else ""))
     print(f"\nViolation Counts:")
     print(f"  Baseline Average:     {avg_baseline:.2f}")
     print(f"  Refined Average:      {avg_refined:.2f}")
@@ -207,19 +225,22 @@ def evaluate_full_dataset(dataset, split=None, data_path=None, use_llm=False, ll
     return results
 
 
-def evaluate_all_datasets(use_llm=False, llm_model="MMed"):
+def evaluate_all_datasets(use_llm=False, llm_model="MMed", max_samples=None):
     """
     Run Path D evaluation on ALL datasets and splits.
     
     Args:
         use_llm: Whether to use LLM-based refinement
         llm_model: Which LLM to use ("MMed", "gpt-4o-mini", "gpt-4o")
+        max_samples: Maximum samples per dataset (None = all, for debugging use 100)
     """
     refiner_type = f"LLM-{llm_model}" if use_llm else "Rule-Based"
     
     print("\n" + "=" * 80)
     print("PATH D: COMPREHENSIVE EVALUATION")
     print(f"Refiner Type: {refiner_type}")
+    if max_samples:
+        print(f"🔍 DEBUG MODE: Processing max {max_samples} samples per dataset")
     print("Evaluating Self-Refine on All Datasets")
     print("=" * 80)
     
@@ -232,7 +253,8 @@ def evaluate_all_datasets(use_llm=False, llm_model="MMed"):
             dataset='PH2', 
             split=split,
             use_llm=use_llm,
-            llm_model=llm_model
+            llm_model=llm_model,
+            max_samples=max_samples
         )
         key = f'PH2_split_{split}_{refiner_type.lower()}'
         all_results[key] = results['summary']
@@ -243,7 +265,8 @@ def evaluate_all_datasets(use_llm=False, llm_model="MMed"):
         dataset='Derm7pt', 
         split=None,
         use_llm=use_llm,
-        llm_model=llm_model
+        llm_model=llm_model,
+        max_samples=max_samples
     )
     key = f'Derm7pt_{refiner_type.lower()}'
     all_results[key] = results['summary']
@@ -254,7 +277,8 @@ def evaluate_all_datasets(use_llm=False, llm_model="MMed"):
         dataset='HAM10000', 
         split=None,
         use_llm=use_llm,
-        llm_model=llm_model
+        llm_model=llm_model,
+        max_samples=max_samples
     )
     key = f'HAM10000_{refiner_type.lower()}'
     all_results[key] = results['summary']
@@ -265,7 +289,9 @@ def evaluate_all_datasets(use_llm=False, llm_model="MMed"):
     else:
         refiner_suffix = "_rulebased"
     
-    output_file = f"results/path_d_full_evaluation/CONSOLIDATED_RESULTS{refiner_suffix}.json"
+    debug_suffix = f"_debug{max_samples}" if max_samples else ""
+    
+    output_file = f"results/path_d_full_evaluation/CONSOLIDATED_RESULTS{refiner_suffix}{debug_suffix}.json"
     with open(output_file, 'w') as f:
         json.dump(all_results, f, indent=2)
     
@@ -273,6 +299,9 @@ def evaluate_all_datasets(use_llm=False, llm_model="MMed"):
     print("✓ ALL DATASETS COMPLETED")
     print("=" * 80)
     print(f"\nConsolidated results saved to: {output_file}")
+    if max_samples:
+        print(f"\n⚠️  DEBUG MODE: Results are based on only {max_samples} samples per dataset")
+        print("   To run on full datasets, remove --max_samples parameter")
     print("\nNext steps:")
     print("  1. Review results in results/path_d_full_evaluation/")
     print("  2. Generate figures for Path D paper")
@@ -284,7 +313,7 @@ def evaluate_all_datasets(use_llm=False, llm_model="MMed"):
 if __name__ == "__main__":
     import argparse
     
-    parser = argparse.ArgumentParser(description='Path D: Full Dataset Evaluation')
+    parser = argparse.ArgumentParser(description='Path D: Full Dataset Evaluation (with DEBUG mode)')
     parser.add_argument('--dataset', type=str, default='all', 
                         choices=['all', 'PH2', 'Derm7pt', 'HAM10000'],
                         help='Which dataset to evaluate')
@@ -294,19 +323,24 @@ if __name__ == "__main__":
                         default='/project/def-arashmoh/shahab33/Medsam/selff-ref/data',
                         help='Path to data directory')
     
-    # NEW: LLM options
+    # LLM options
     parser.add_argument('--use_llm', action='store_true',
                         help='Use LLM-based refinement instead of rule-based')
     parser.add_argument('--llm_model', type=str, default='MMed',
                         choices=['MMed', 'gpt-4o-mini', 'gpt-4o'],
                         help='Which LLM to use (MMed is free, GPT requires API key)')
     
+    # NEW: Debug option
+    parser.add_argument('--max_samples', type=int, default=None,
+                        help='Maximum samples to process per dataset (for debugging, e.g. 100)')
+    
     args = parser.parse_args()
     
     if args.dataset == 'all':
         evaluate_all_datasets(
             use_llm=args.use_llm,
-            llm_model=args.llm_model
+            llm_model=args.llm_model,
+            max_samples=args.max_samples
         )
     else:
         evaluate_full_dataset(
@@ -314,5 +348,6 @@ if __name__ == "__main__":
             split=args.split,
             data_path=args.data_path,
             use_llm=args.use_llm,
-            llm_model=args.llm_model
+            llm_model=args.llm_model,
+            max_samples=args.max_samples
         )
