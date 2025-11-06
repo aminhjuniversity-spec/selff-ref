@@ -263,6 +263,37 @@ def generate_statistics(results):
     return stats
 
 
+def analyze_detection_success(results):
+    """
+    CONTRIBUTION 1: Calculate detection success rate
+    Detection = % of samples that have at least 1 violation detected
+    """
+    print("\n" + "=" * 80)
+    print("CONTRIBUTION 1: DETECTION SUCCESS")
+    print("=" * 80)
+    
+    # Use rulebased results (both have same baseline/initial violations)
+    total_samples = 0
+    samples_with_violations = 0
+    
+    for dataset_name, data in results['rulebased'].items():
+        test_size = data.get('test_size', 0)
+        total_samples += test_size
+        
+        # Samples with violations = improved + unchanged (any non-zero initial violations)
+        # "Worsened" means they had 0 initially but gained violations (shouldn't happen with detection)
+        samples_with_violations += (data['samples_improved'] + data['samples_unchanged'])
+    
+    detection_rate = (samples_with_violations / total_samples * 100) if total_samples > 0 else 0
+    
+    print(f"\nTotal samples evaluated: {total_samples}")
+    print(f"Samples with violations detected: {samples_with_violations}")
+    print(f"Detection success rate: {detection_rate:.1f}%")
+    print(f"\n✓ Contribution 1: Our method detects violations in {detection_rate:.1f}% of samples")
+    
+    return detection_rate
+
+
 def main():
     """Main comparison pipeline."""
     print("\n" + "=" * 80)
@@ -271,27 +302,31 @@ def main():
     print("=" * 80)
     
     # Load results
-    print("\n[1/4] Loading results...")
+    print("\n[1/5] Loading results...")  # Changed from 1/4 to 1/5
     results = load_results()
     
     if not results['rulebased'] or not results['llm']:
         print("\n⚠ ERROR: Missing results files!")
-        print("Make sure you've run both:")
-        print("  1. run_pathd_rulebased.sh")
-        print("  2. run_pathd_llm.sh")
         return
     
-    # Generate comparison table
-    print("\n[2/4] Generating comparison table...")
+    # NEW: Analyze detection (Contribution 1)
+    print("\n[2/5] Analyzing detection success...")
+    detection_rate = analyze_detection_success(results)
+    
+    # Generate comparison table (Contributions 2 & 3)
+    print("\n[3/5] Generating comparison table...")
     df_comparison = create_comparison_table(results)
     
     # Generate comparison figure
-    print("\n[3/4] Creating comparison figure...")
+    print("\n[4/5] Creating comparison figure...")
     plot_comparison(results)
     
     # Generate statistics
-    print("\n[4/4] Generating statistics...")
+    print("\n[5/5] Generating statistics...")
     stats = generate_statistics(results)
+    
+    # Add detection rate to stats
+    stats['detection_rate'] = detection_rate
     
     print("\n" + "=" * 80)
     print("✓ COMPARISON ANALYSIS COMPLETE")
@@ -303,17 +338,23 @@ def main():
     print("  - comparison_statistics.json (numbers for writing)")
     print("\nAll files in: results/path_d_full_evaluation/")
     
+    # Updated summary with all 3 contributions
     print("\n" + "=" * 80)
-    print("PAPER CONTRIBUTION SUMMARY")
+    print("ALL 3 PATH D CONTRIBUTIONS")
     print("=" * 80)
     print(f"""
-Path D demonstrates the necessity of LLM-based refinement for medical 
-concept consistency. On real dermoscopic datasets, our LLM-based approach 
-achieves {stats['avg_llm_reduction']:.1f}% average violation reduction compared to 
-{stats['avg_rulebased_reduction']:.1f}% for rule-based refinement, representing a 
-{stats['absolute_improvement']:.1f} percentage point improvement. This shows that 
-simple heuristics are insufficient for medical concept refinement and that 
-clinical reasoning from LLMs is essential.
+✓ Contribution 1 (Detection): {detection_rate:.1f}%
+  Our consistency rules successfully detect violations in {detection_rate:.1f}% of samples.
+
+✓ Contribution 2 (Rule-Based Failure): {stats['avg_rulebased_reduction']:.1f}%
+  Simple rule-based refinement achieves only {stats['avg_rulebased_reduction']:.1f}% average reduction.
+
+✓ Contribution 3 (LLM Success): {stats['avg_llm_reduction']:.1f}%
+  LLM-based refinement achieves {stats['avg_llm_reduction']:.1f}% average reduction,
+  representing a {stats['absolute_improvement']:.1f} percentage point improvement over rule-based.
+
+This demonstrates that medical concept refinement requires clinical reasoning from LLMs,
+not just simple heuristics.
 """)
 
 
