@@ -48,8 +48,7 @@ export CUDA_VISIBLE_DEVICES=0
 echo "Running debug tests on PH2 split 0 (20 samples)..."
 python debug_pathd_quick.py \
   --test all \
-  --max_samples 20 \
-  --output_dir results/job_${SLURM_JOB_ID}
+  --max_samples 20
 
 echo "Python exit code: $?"
 echo "========================================="
