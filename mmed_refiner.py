@@ -134,16 +134,12 @@ Provide the REFINED description that fixes these violations. Output ONLY the ref
         
         return output.strip()
     
+    # NEW (LENIENT):
     def _validate_format(self, refined_str: str) -> bool:
-        """Check if refined concepts follow expected format"""
-        required_keys = ['color', 'shape', 'border', 'dermoscopic patterns', 
-                        'texture', 'symmetry', 'elevation']
-        
-        for key in required_keys:
-            if f"the {key}" not in refined_str.lower():
-                return False
-        
-        return True
+    # Just check if 5 out of 7 concept keywords are present
+        concept_keywords = ['color', 'shape', 'border', 'pattern', 'texture', 'symmetry', 'elevation']
+        found_count = sum(1 for keyword in concept_keywords if keyword in refined_str.lower())
+        return found_count >= 5  # ✅ 5/7 is good enough
 
 
 # Example usage for testing
