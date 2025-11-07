@@ -103,11 +103,11 @@ class ConceptSelfRefine:
     4. Repeat until consistent or max iterations
     """
     
-    def __init__(self, llm_refine_fn, max_iterations=3, verbose=True):
+    def __init__(self, llm_refine_fn, max_iterations=5, verbose=True):
         """
         Args:
             llm_refine_fn: Function that takes (concepts_str, feedback) and returns refined concepts
-            max_iterations: Maximum refinement iterations
+            max_iterations: Maximum refinement iterations (increased from 3 to 5)
             verbose: Whether to print refinement progress
         """
         self.llm_refine_fn = llm_refine_fn
@@ -164,6 +164,7 @@ class ConceptSelfRefine:
         """
         current_concepts = initial_concepts
         history = [initial_concepts]
+        violation_history = []  # NEW: Track violation counts instead of strings
         
         refinement_info = {
             'iterations': 0,
@@ -182,21 +183,45 @@ class ConceptSelfRefine:
             
             # Check consistency
             violations = self.rules.check_consistency(concepts_dict)
+            num_violations = len(violations)
+            violation_history.append(num_violations)
             
             if iteration == 0:
-                refinement_info['initial_violations'] = len(violations)
+                refinement_info['initial_violations'] = num_violations
             
             if self.verbose:
-                print(f"Found {len(violations)} consistency violations")
+                print(f"Found {num_violations} consistency violations")
             
             # If no violations, we're done
-            if len(violations) == 0:
+            if num_violations == 0:
                 if self.verbose:
                     print(f"✓ Converged at iteration {iteration}")
                 refinement_info['converged'] = True
                 refinement_info['iterations'] = iteration
                 refinement_info['final_violations'] = 0
                 break
+            
+            # NEW: Smarter oscillation detection (only after 3 iterations)
+            if len(violation_history) >= 3:
+                last_three = violation_history[-3:]
+                
+                # Check if violations are stuck (no progress for 3 consecutive iterations)
+                if last_three[0] == last_three[1] == last_three[2]:
+                    if self.verbose:
+                        print(f"⚠ Oscillation detected: violations stuck at {last_three[0]} for 3 iterations, stopping")
+                    refinement_info['iterations'] = iteration
+                    refinement_info['final_violations'] = num_violations
+                    refinement_info['oscillation_reason'] = 'stuck'
+                    break
+                
+                # Check if violations are consistently increasing
+                elif last_three[1] >= last_three[0] and last_three[2] >= last_three[1]:
+                    if self.verbose:
+                        print(f"⚠ Oscillation detected: violations increasing [{last_three[0]}→{last_three[1]}→{last_three[2]}], stopping")
+                    refinement_info['iterations'] = iteration
+                    refinement_info['final_violations'] = num_violations
+                    refinement_info['oscillation_reason'] = 'increasing'
+                    break
             
             # Generate feedback
             feedback = "\n".join(violations)
@@ -206,26 +231,18 @@ class ConceptSelfRefine:
             # Refine concepts
             refined_concepts = self.llm_refine_fn(current_concepts, feedback, concepts_dict)
             
-            # Check for oscillation (if refined concepts match any previous state)
-            if refined_concepts in history:
-                if self.verbose:
-                    print(f"⚠ Oscillation detected at iteration {iteration}, stopping")
-                refinement_info['iterations'] = iteration
-                refinement_info['final_violations'] = len(violations)
-                break
-            
-            # Update history
+            # Update history (still keep for reference, but don't use for oscillation detection)
             history.append(refined_concepts)
             current_concepts = refined_concepts
             
             refinement_info['history'].append({
                 'iteration': iteration,
-                'violations': len(violations),
+                'violations': num_violations,
                 'feedback': feedback
             })
         
         # Final check
-        if refinement_info['iterations'] == self.max_iterations:
+        if refinement_info['iterations'] == self.max_iterations - 1:
             final_concepts_dict = self.parse_concepts(current_concepts)
             final_violations = self.rules.check_consistency(final_concepts_dict)
             refinement_info['final_violations'] = len(final_violations)
