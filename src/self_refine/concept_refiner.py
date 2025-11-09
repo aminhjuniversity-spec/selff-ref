@@ -57,12 +57,17 @@ class ConceptConsistencyRules:
                 )
         
         # Rule 3: Smooth texture conflicts with ulcerated/raised descriptions
-        if 'smooth' in concepts_dict.get('texture', '').lower():
-            if 'ulcerated' in concepts_dict.get('texture', '').lower() or \
-               'raised' in concepts_dict.get('elevation', '').lower():
-                violations.append(
-                    "Clinical inconsistency: 'Smooth' texture conflicts with raised/ulcerated features."
-                )
+        if 'smooth' in refined_dict.get('texture', '').lower():
+            texture = refined_dict.get('texture', '').lower()
+            elevation = refined_dict.get('elevation', '').lower()
+        
+            # Fix texture if needed
+            if 'ulcerated' in texture:
+                refined_dict['texture'] = 'smooth'
+    
+            # ⭐ KEY FIX: Also modify elevation if it conflicts!
+            if 'raised' in elevation or 'ulcerat' in elevation:
+                refined_dict['elevation'] = 'slightly raised'  ← NOW FIXES ELEVATION TOO!
         
         # Rule 4: BCC indicators (arborizing vessels) should have specific characteristics
         if 'arborizing vessels' in concepts_dict.get('dermoscopic patterns', '').lower():
