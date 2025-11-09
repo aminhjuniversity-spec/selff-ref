@@ -57,17 +57,12 @@ class ConceptConsistencyRules:
                 )
         
         # Rule 3: Smooth texture conflicts with ulcerated/raised descriptions
-        if 'smooth' in refined_dict.get('texture', '').lower():
-            texture = refined_dict.get('texture', '').lower()
-            elevation = refined_dict.get('elevation', '').lower()
-        
-            # Fix texture if needed
-            if 'ulcerated' in texture:
-                refined_dict['texture'] = 'smooth'
-    
-            # ⭐ KEY FIX: Also modify elevation if it conflicts!
-            if 'raised' in elevation or 'ulcerat' in elevation:
-                refined_dict['elevation'] = 'slightly raised'  ← NOW FIXES ELEVATION TOO!
+        if 'smooth' in concepts_dict.get('texture', '').lower():
+            if 'ulcerated' in concepts_dict.get('texture', '').lower() or \
+               'raised' in concepts_dict.get('elevation', '').lower():
+                violations.append(
+                    "Clinical inconsistency: 'Smooth' texture conflicts with raised/ulcerated features."
+                )
         
         # Rule 4: BCC indicators (arborizing vessels) should have specific characteristics
         if 'arborizing vessels' in concepts_dict.get('dermoscopic patterns', '').lower():
@@ -169,7 +164,7 @@ class ConceptSelfRefine:
         """
         current_concepts = initial_concepts
         history = [initial_concepts]
-        violation_history = []  # NEW: Track violation counts instead of strings
+        violation_history = []  # Track violation counts to detect oscillation
         
         refinement_info = {
             'iterations': 0,
@@ -206,7 +201,7 @@ class ConceptSelfRefine:
                 refinement_info['final_violations'] = 0
                 break
             
-            # NEW: Smarter oscillation detection (only after 3 iterations)
+            # Smarter oscillation detection (only after 3 iterations)
             if len(violation_history) >= 3:
                 last_three = violation_history[-3:]
                 
@@ -236,7 +231,7 @@ class ConceptSelfRefine:
             # Refine concepts
             refined_concepts = self.llm_refine_fn(current_concepts, feedback, concepts_dict)
             
-            # Update history (still keep for reference, but don't use for oscillation detection)
+            # Update history
             history.append(refined_concepts)
             current_concepts = refined_concepts
             
@@ -288,10 +283,19 @@ class SimpleRuleBasedRefiner:
            'regular' in refined_dict.get('dermoscopic patterns', '').lower():
             refined_dict['dermoscopic patterns'] = 'atypical pigment network, irregular streaks'
         
-        # Fix Rule 3: Smooth + Ulcerated → Remove ulcerated from texture
-        if 'smooth' in refined_dict.get('texture', '').lower() and \
-           'ulcerated' in refined_dict.get('texture', '').lower():
-            refined_dict['texture'] = 'smooth'
+        # Fix Rule 3: Smooth texture conflicts with raised/ulcerated
+        # CRITICAL FIX: Must modify BOTH texture AND elevation
+        if 'smooth' in refined_dict.get('texture', '').lower():
+            texture = refined_dict.get('texture', '').lower()
+            elevation = refined_dict.get('elevation', '').lower()
+            
+            # Fix texture if needed
+            if 'ulcerated' in texture:
+                refined_dict['texture'] = 'smooth'
+            
+            # KEY FIX: Also modify elevation if it conflicts
+            if 'raised' in elevation or 'ulcerat' in elevation:
+                refined_dict['elevation'] = 'flat to slightly raised'
         
         # Fix Rule 4: Arborizing vessels + Regular shape → Make shape irregular
         if 'arborizing vessels' in refined_dict.get('dermoscopic patterns', '').lower() and \
