@@ -10,7 +10,7 @@ import torch
 from src.models.Explicd import Explicd
 from src.models.MMed_Llama_3_8B import MMedLlama3
 from src.models.Mistral import Mistral
-from src.models.GPT4o import GPT4o
+#from src.models.GPT4o import GPT4o
 from src.utils import map_label_to_name, load_data, map_letter_to_label, calculate_metrics, save_data_to_json, seed_everything, get_current_date, create_explicd_config
 from src.rices import RICES
 
@@ -194,8 +194,8 @@ def c_to_y(model_name: str, dataset:str, ckpt:str, split=None, raw_values=False,
         model = MMedLlama3(ckpt)
     elif model_name == "Mistral":
         model = Mistral()
-    elif model_name == "GPT":
-        model = GPT4o(model=ckpt)
+    #elif model_name == "GPT":
+        #model = GPT4o(model=ckpt)
     else:
         raise TypeError(f"The specified model {model_name} does not have a valid implementation.")
 
