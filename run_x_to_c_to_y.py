@@ -28,7 +28,7 @@ def x_to_c(dataset: str, split: int=None, raw_values: bool=False, predict_for_tr
         None: Save predicted concepts into a CSV file.
     """
 
-   # Load data
+    # Load data
     train_dataloader, test_dataloader = load_data(
         dataset=dataset, 
         split=split,
@@ -356,7 +356,7 @@ if __name__ == "__main__":
                predict_for_train_set=args.predict_for_train_set,
                data_path=args.data_path)
     
-   # Step 2: Predict labels from concepts (c -> y)
+    # Step 2: Predict labels from concepts (c -> y)
     print("\n[STEP 2] Predicting final diagnosis from concepts using LLM...")
     c_to_y(model_name=args.llm, dataset=args.dataset, ckpt=args.ckpt, split=args.split, 
            raw_values=args.raw_values, report_path=args.report_path, use_demos=args.use_demos, 
