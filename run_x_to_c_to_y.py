@@ -15,7 +15,7 @@ from src.utils import map_label_to_name, load_data, map_letter_to_label, calcula
 from src.rices import RICES
 
 
-def x_to_c(dataset: str, split: int=None, raw_values: bool=False, predict_for_train_set: bool=False) -> None:
+def x_to_c(dataset: str, split: int=None, raw_values: bool=False, predict_for_train_set: bool=False, data_path: str=None) -> None:
     """Predicts concepts from ExpLICD model with self-refine.
 
     Args:
@@ -28,13 +28,12 @@ def x_to_c(dataset: str, split: int=None, raw_values: bool=False, predict_for_tr
         None: Save predicted concepts into a CSV file.
     """
 
-    # Load data
+   # Load data
     train_dataloader, test_dataloader = load_data(
         dataset=dataset, 
         split=split,
-        data_path=getattr(args, 'data_path', None)
+        data_path=data_path
     )
-
     # Initialize ExpLICD model
     config = create_explicd_config(gpu_id=0)
     model = Explicd(config=config)
@@ -143,7 +142,7 @@ def x_to_c(dataset: str, split: int=None, raw_values: bool=False, predict_for_tr
     torch.cuda.empty_cache()
 
 
-def c_to_y(model_name: str, dataset:str, ckpt:str, split=None, raw_values=False, report_path: str = None, use_demos=False, n_demos=0, ground_truth_concepts=False):
+def c_to_y(model_name: str, dataset:str, ckpt:str, split=None, raw_values=False, report_path: str = None, use_demos=False, n_demos=0, ground_truth_concepts=False, data_path: str=None):
     """
     Predict final diagnosis from concepts using LLM.
     
@@ -350,16 +349,19 @@ if __name__ == "__main__":
     print("#==============================================================================")
 
     # Step 1: Generate concepts from images (x -> c)
+    
     if args.generate_concepts:
         print("\n[STEP 1] Generating concept predictions from ExpLICD...")
         x_to_c(dataset=args.dataset, split=args.split, raw_values=args.raw_values, 
-               predict_for_train_set=args.predict_for_train_set)
+               predict_for_train_set=args.predict_for_train_set,
+               data_path=args.data_path)
     
-    # Step 2: Predict labels from concepts (c -> y)
+   # Step 2: Predict labels from concepts (c -> y)
     print("\n[STEP 2] Predicting final diagnosis from concepts using LLM...")
     c_to_y(model_name=args.llm, dataset=args.dataset, ckpt=args.ckpt, split=args.split, 
            raw_values=args.raw_values, report_path=args.report_path, use_demos=args.use_demos, 
-           n_demos=args.n_demos, ground_truth_concepts=args.gt_concepts)
+           n_demos=args.n_demos, ground_truth_concepts=args.gt_concepts,
+           data_path=args.data_path)
     
     # Step 3: Calculate classification metrics
     print("\n[STEP 3] Calculating classification metrics...")
