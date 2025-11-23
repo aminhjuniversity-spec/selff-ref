@@ -3,8 +3,8 @@
 #SBATCH --account=def-arashmoh
 #SBATCH --time=12:00:00
 #SBATCH --nodes=1
-#SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=6
+#SBATCH --gres=gpu:h100:1              # Request H100 80GB GPU
+#SBATCH --cpus-per-task=8              # Increased for faster processing
 #SBATCH --mem=64G
 #SBATCH --output=logs/xcy_pipeline_%j.out
 #SBATCH --error=logs/xcy_pipeline_%j.err
@@ -28,9 +28,16 @@ cd /project/def-arashmoh/shahab33/Medsam/selff-ref || exit 1
 # Create directories
 mkdir -p logs results/concept_prediction results/label_prediction
 
-# Set paths
+# Set paths and CUDA environment
 export CUDA_VISIBLE_DEVICES=0
 export DATA_PATH="/project/def-arashmoh/shahab33/Medsam/selff-ref/data"
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True  # Better memory management
+
+# Check GPU
+echo ""
+echo "🔍 GPU Information:"
+nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv
+echo ""
 
 echo ""
 echo "📊 Processing all datasets with self-refine..."
@@ -56,6 +63,17 @@ for split in 0 1 2 3 4; do
         --data_path $DATA_PATH \
         2>&1 | tee -a logs/ph2_split_${split}_xc.log
     
+    # Check if concept generation succeeded
+    if [ $? -ne 0 ]; then
+        echo "  ❌ ERROR: Concept generation failed for PH2 split $split"
+        continue
+    fi
+    
+    # Clear GPU memory between steps
+    echo "  🧹 Clearing GPU memory..."
+    python -c "import torch; torch.cuda.empty_cache(); import gc; gc.collect()"
+    sleep 2
+    
     # Step 2: c→y (concepts to diagnosis)
     echo "  [c→y] Predicting diagnosis..."
     python run_x_to_c_to_y.py \
@@ -67,7 +85,17 @@ for split in 0 1 2 3 4; do
         --data_path $DATA_PATH \
         2>&1 | tee -a logs/ph2_split_${split}_cy.log
     
+    if [ $? -ne 0 ]; then
+        echo "  ❌ ERROR: Diagnosis prediction failed for PH2 split $split"
+        continue
+    fi
+    
+    # Clear GPU memory after each split
+    echo "  🧹 Clearing GPU memory..."
+    python -c "import torch; torch.cuda.empty_cache(); import gc; gc.collect()"
+    
     echo "  ✓ Split $split completed at $(date)"
+    echo ""
 done
 
 echo ""
@@ -89,18 +117,30 @@ python run_x_to_c_to_y.py \
     --data_path $DATA_PATH \
     2>&1 | tee logs/derm7pt_xc.log
 
-# Step 2: c→y
-echo "  [c→y] Predicting diagnosis..."
-python run_x_to_c_to_y.py \
-    --dataset Derm7pt \
-    --llm MMed \
-    --ckpt Henrychur/MMed-Llama-3-8B \
-    --n_demos 0 \
-    --data_path $DATA_PATH \
-    2>&1 | tee logs/derm7pt_cy.log
+if [ $? -eq 0 ]; then
+    # Clear GPU memory
+    echo "  🧹 Clearing GPU memory..."
+    python -c "import torch; torch.cuda.empty_cache(); import gc; gc.collect()"
+    sleep 2
+    
+    # Step 2: c→y
+    echo "  [c→y] Predicting diagnosis..."
+    python run_x_to_c_to_y.py \
+        --dataset Derm7pt \
+        --llm MMed \
+        --ckpt Henrychur/MMed-Llama-3-8B \
+        --n_demos 0 \
+        --data_path $DATA_PATH \
+        2>&1 | tee logs/derm7pt_cy.log
+    
+    echo ""
+    echo "✓ Derm7pt completed!"
+else
+    echo "  ❌ ERROR: Concept generation failed for Derm7pt"
+fi
 
-echo ""
-echo "✓ Derm7pt completed!"
+# Clear GPU memory
+python -c "import torch; torch.cuda.empty_cache(); import gc; gc.collect()"
 echo ""
 
 # ============================================
@@ -118,18 +158,28 @@ python run_x_to_c_to_y.py \
     --data_path $DATA_PATH \
     2>&1 | tee logs/ham10000_xc.log
 
-# Step 2: c→y
-echo "  [c→y] Predicting diagnosis..."
-python run_x_to_c_to_y.py \
-    --dataset HAM10000 \
-    --llm MMed \
-    --ckpt Henrychur/MMed-Llama-3-8B \
-    --n_demos 0 \
-    --data_path $DATA_PATH \
-    2>&1 | tee logs/ham10000_cy.log
+if [ $? -eq 0 ]; then
+    # Clear GPU memory
+    echo "  🧹 Clearing GPU memory..."
+    python -c "import torch; torch.cuda.empty_cache(); import gc; gc.collect()"
+    sleep 2
+    
+    # Step 2: c→y
+    echo "  [c→y] Predicting diagnosis..."
+    python run_x_to_c_to_y.py \
+        --dataset HAM10000 \
+        --llm MMed \
+        --ckpt Henrychur/MMed-Llama-3-8B \
+        --n_demos 0 \
+        --data_path $DATA_PATH \
+        2>&1 | tee logs/ham10000_cy.log
+    
+    echo ""
+    echo "✓ HAM10000 completed!"
+else
+    echo "  ❌ ERROR: Concept generation failed for HAM10000"
+fi
 
-echo ""
-echo "✓ HAM10000 completed!"
 echo ""
 
 # ============================================
@@ -147,6 +197,9 @@ echo ""
 echo "📊 To view results:"
 echo "  cd results/label_prediction"
 echo "  ls -lh"
+echo ""
+echo "📊 Result files:"
+ls -lh results/label_prediction/ 2>/dev/null || echo "  (No files yet)"
 echo ""
 echo "📈 Next: Calculate metrics with:"
 echo "  python calculate_metrics.py --model=MMed --task=PH2_eval ..."
