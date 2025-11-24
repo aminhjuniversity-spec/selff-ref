@@ -3,10 +3,11 @@ MMed-LLM Based Refiner for ExpLICD Self-Refine (Path D)
 Uses MMed-Llama-3-8B instead of GPT-4o (FREE - runs on cluster)
 
 ENHANCED VERSION with:
-- Relaxed format validation
+- Improved prompts with clinical examples
 - Better output cleaning
 - Concept extraction/salvaging
 - Targeted refinement (only fix violated concepts)
+- Automatic fallback to rule-based when LLM fails
 """
 
 import sys
@@ -46,10 +47,10 @@ class MMedBasedRefiner:
             Refined concept description string
         """
         
-        # NEW: Extract violated concepts from feedback for targeted refinement
+        # Extract violated concepts from feedback for targeted refinement
         violated_concepts = self._extract_violated_concepts(feedback)
         
-        # Create the prompt for MMed-LLM with targeted refinement
+        # Build prompts with improved clinical guidance
         instruction = self._build_instruction(violated_concepts)
         query = self._build_query(concepts_str, feedback, violated_concepts)
         
@@ -57,28 +58,36 @@ class MMedBasedRefiner:
             # Get prompt from MMed
             prompt = self.model.get_prompt(instruction=instruction, query=query, demos=None)
             
-            # Generate refinement (max 300 tokens)
-            refined_concepts = self.model.predict(prompt=prompt, max_new_tokens=300).strip()
+            # Generate refinement (increased from 300 to 500 tokens)
+            refined_concepts = self.model.predict(prompt=prompt, max_new_tokens=500).strip()
             
             # Clean up output (remove any extra text)
             refined_concepts = self._clean_output(refined_concepts)
             
-            # NEW: Try to extract concepts if format is partially valid
-            if not self._validate_format(refined_concepts):
-                print(f"⚠ MMed output invalid, trying to extract concepts...")
+            # Validate format
+            if self._validate_format(refined_concepts):
+                print(f"✓ LLM refinement successful")
+                return refined_concepts
+            else:
+                # Try to extract concepts if format is partially valid
+                print(f"⚠ Format validation failed, attempting extraction...")
                 extracted = self._try_extract_concepts(refined_concepts, concepts_dict)
+                
                 if extracted and self._validate_format(extracted):
-                    print(f"✓ Successfully extracted concepts")
+                    print(f"✓ Extraction successful")
                     return extracted
                 else:
-                    print(f"⚠ Extraction failed, falling back to original")
-                    return concepts_str
-            
-            return refined_concepts
+                    # Fall back to rule-based refinement
+                    print(f"⚠ Extraction failed, using rule-based fallback")
+                    from src.self_refine.concept_refiner import SimpleRuleBasedRefiner
+                    fallback = SimpleRuleBasedRefiner()
+                    return fallback(concepts_str, feedback, concepts_dict)
             
         except Exception as e:
-            print(f"⚠ MMed refinement failed: {e}, using original concepts")
-            return concepts_str
+            print(f"⚠ LLM refinement error: {e}, using rule-based fallback")
+            from src.self_refine.concept_refiner import SimpleRuleBasedRefiner
+            fallback = SimpleRuleBasedRefiner()
+            return fallback(concepts_str, feedback, concepts_dict)
     
     def _extract_violated_concepts(self, feedback: str) -> set:
         """
@@ -111,63 +120,64 @@ class MMedBasedRefiner:
         return violated
     
     def _build_instruction(self, violated_concepts: set) -> str:
-        """Build targeted instruction based on violated concepts."""
+        """Build targeted instruction with clinical examples."""
         
-        base_instruction = """You are a dermatology expert. Your task is to refine dermoscopic concept descriptions to fix clinical inconsistencies.
+        base_instruction = """You are a dermatology expert. Fix clinical inconsistencies in dermoscopic descriptions.
 
 CRITICAL RULES:
-1. ONLY modify the concepts mentioned in the feedback
-2. Keep ALL other concepts exactly as they are
-3. Maintain the exact template format: "The color is ..., the shape is ..., the border is ..., the dermoscopic patterns are ..., the texture is ..., the symmetry is ..., the elevation is ..."
-4. Output ONLY the complete refined description, nothing else (no explanations, no preambles)
+1. Output ONLY the complete refined description (no preambles, no explanations)
+2. Use this EXACT format: "The color is ..., the shape is ..., the border is ..., the dermoscopic patterns are ..., the texture is ..., the symmetry is ..., the elevation is ..."
+3. ONLY modify concepts that are clinically inconsistent
+4. Keep all other concepts EXACTLY as they are
 
-"""
+CLINICAL CONSISTENCY RULES:"""
         
-        # Add concept-specific guidance for violated concepts
-        if violated_concepts:
-            base_instruction += "\nFOCUS ON FIXING THESE CONCEPTS:\n"
-            
-            if 'border' in violated_concepts:
-                base_instruction += "- Border: Use 'often blurry and irregular' for asymmetric lesions\n"
-            
-            if 'color' in violated_concepts or 'dermoscopic patterns' in violated_concepts:
-                base_instruction += "- Patterns: Use 'atypical pigment network, irregular streaks' for multiple colors\n"
-            
-            if 'symmetry' in violated_concepts:
-                base_instruction += "- Symmetry: Use 'asymmetrical' for atypical patterns/blue-whitish veil\n"
-            
-            if 'texture' in violated_concepts or 'elevation' in violated_concepts:
-                base_instruction += "- Texture/Elevation: 'smooth' conflicts with 'raised' or 'ulcerated'\n"
+        # Add specific rules for violated concepts
+        if 'border' in violated_concepts or 'symmetry' in violated_concepts:
+            base_instruction += """
+- Asymmetric lesions → Use "often blurry and irregular" border
+- Symmetric lesions → Use "sharp and well-defined" border"""
+        
+        if 'color' in violated_concepts or 'dermoscopic patterns' in violated_concepts:
+            base_instruction += """
+- Multiple colors → Use "atypical pigment network, irregular streaks" patterns
+- Single color → Use "regular pigment network, symmetric dots" patterns"""
+        
+        if 'texture' in violated_concepts or 'elevation' in violated_concepts:
+            base_instruction += """
+- Smooth texture → Must be "flat to slightly raised" elevation
+- Raised/ulcerated → Cannot have "smooth" texture"""
         
         base_instruction += """
-VALID CONCEPT VALUES (use these exact phrases):
 
-Color: "highly variable, often with multiple colors (black, brown, red, white, blue)" OR "uniformly tan, brown, or black"
-Shape: "irregular" OR "round" OR "round to irregular"
-Border: "often blurry and irregular" OR "sharp and well-defined"
-Patterns: "atypical pigment network, irregular streaks, blue-whitish veil, irregular" OR "regular pigment network, symmetric dots and globules"
-Texture: "a raised or ulcerated surface" OR "smooth"
-Symmetry: "asymmetrical" OR "symmetrical"
-Elevation: "flat to raised" OR "raised with possible central ulceration" OR "slightly raised"
+EXAMPLES OF GOOD FIXES:
+❌ BAD: "The color is multiple colors, border is sharp, symmetry is asymmetric"
+✅ GOOD: "The color is multiple colors, border is often blurry and irregular, symmetry is asymmetric"
+
+❌ BAD: "The texture is smooth, elevation is raised with possible ulceration"
+✅ GOOD: "The texture is smooth, elevation is flat to slightly raised"
 """
         
         return base_instruction
     
     def _build_query(self, concepts_str: str, feedback: str, violated_concepts: set) -> str:
-        """Build targeted query emphasizing which concepts to fix."""
+        """Build query with clear task description."""
         
-        query = f"""Current description:
+        # Make violations more prominent
+        violation_list = "\n".join([f"• {v}" for v in feedback.split('\n') if v])
+        
+        query = f"""CURRENT DESCRIPTION:
 {concepts_str}
 
-Violations to fix:
-{feedback}
+VIOLATIONS TO FIX:
+{violation_list}
 
-IMPORTANT: Only modify the concepts mentioned in the violations above ({', '.join(violated_concepts) if violated_concepts else 'as indicated'}). Keep all other concepts EXACTLY as they are.
+TASK: Rewrite the COMPLETE description fixing ONLY the concepts mentioned above.
 
-Provide the complete refined description in this exact format:
-The color is ..., the shape is ..., the border is ..., the dermoscopic patterns are ..., the texture is ..., the symmetry is ..., the elevation is ...
+OUTPUT FORMAT (copy this structure exactly):
+The color is [KEEP OR FIX], the shape is [KEEP OR FIX], the border is [KEEP OR FIX], the dermoscopic patterns are [KEEP OR FIX], the texture is [KEEP OR FIX], the symmetry is [KEEP OR FIX], the elevation is [KEEP OR FIX].
 
-OUTPUT ONLY THE REFINED DESCRIPTION (no explanations):"""
+YOUR REFINED DESCRIPTION:"""
         
         return query
     
@@ -180,9 +190,18 @@ OUTPUT ONLY THE REFINED DESCRIPTION (no explanations):"""
         - "Here is the refined..."
         - Multiple newlines
         - Extra explanations
+        - Bullet points/lists
         """
         # Remove common preambles
-        output = re.sub(r'^(refined description|here is|the refined)[\s:]*', '', output, flags=re.IGNORECASE)
+        output = re.sub(r'^(refined description|here is|the refined|your refined description)[\s:]*', '', output, flags=re.IGNORECASE)
+        
+        # Remove bullet points/lists that LLMs sometimes generate
+        output = re.sub(r'^\s*[-•*]\s*', '', output, flags=re.MULTILINE)
+        
+        # Extract first complete sentence starting with "The color"
+        match = re.search(r'The color is .+?elevation is [^.]+\.', output, re.IGNORECASE | re.DOTALL)
+        if match:
+            return match.group(0)
         
         # Split by newlines and find the concept sentence
         lines = output.split('\n')
@@ -225,7 +244,7 @@ OUTPUT ONLY THE REFINED DESCRIPTION (no explanations):"""
     
     def _try_extract_concepts(self, output: str, original_dict: Dict[str, str]) -> str:
         """
-        NEW: Try to salvage partially valid output by extracting concepts.
+        Try to salvage partially valid output by extracting concepts.
         
         If MMed output is partially valid (e.g., some concepts present but not all),
         try to extract what we can and fill in missing concepts from original.
