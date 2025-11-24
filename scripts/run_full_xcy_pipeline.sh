@@ -31,7 +31,7 @@ mkdir -p logs results/concept_prediction results/label_prediction
 # Set paths and CUDA environment
 export CUDA_VISIBLE_DEVICES=0
 export DATA_PATH="/project/def-arashmoh/shahab33/Medsam/selff-ref/data"
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True  # Better memory management
+export PYTORCH_ALLOC_CONF=expandable_segments:True  # Better memory management (new name)
 
 # Check GPU
 echo ""
