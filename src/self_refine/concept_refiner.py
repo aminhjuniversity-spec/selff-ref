@@ -105,9 +105,13 @@ class ConceptSelfRefine:
         
         for iteration in range(self.max_iterations):
             if self.verbose:
-                print(f"\n--- Iteration {iteration} ---")
+                print(f"
+--- Iteration {iteration} ---")
             
+            # Parse concepts
             concepts_dict = self.parse_concepts(current_concepts)
+            
+            # Check consistency
             violations = self.rules.check_consistency(concepts_dict)
             num_violations = len(violations)
             violation_history.append(num_violations)
@@ -118,7 +122,7 @@ class ConceptSelfRefine:
             if self.verbose:
                 print(f"Found {num_violations} consistency violations")
             
-            # SUCCESS
+            # SUCCESS: No violations
             if num_violations == 0:
                 if self.verbose:
                     print(f"✓ Converged at iteration {iteration}")
@@ -127,11 +131,11 @@ class ConceptSelfRefine:
                 refinement_info['final_violations'] = 0
                 break
             
-            # IMPROVED OSCILLATION DETECTION
-            if len(violation_history) >= 4:
+            # IMPROVED: More lenient oscillation detection
+            if len(violation_history) >= 4:  # Wait for 4 iterations instead of 3
                 last_four = violation_history[-4:]
                 
-                # Stuck
+                # Check if truly stuck (no progress at all)
                 if last_four[0] == last_four[1] == last_four[2] == last_four[3]:
                     if last_four[0] >= violation_history[0]:
                         if self.verbose:
@@ -139,14 +143,14 @@ class ConceptSelfRefine:
                         refinement_info['oscillation_reason'] = 'stuck'
                         break
                 
-                # Worsening
+                # Check if consistently worsening (3 increases in a row)
                 elif all(last_four[i+1] > last_four[i] for i in range(3)):
                     if self.verbose:
                         print(f"⚠ Violations consistently increasing, stopping")
                     refinement_info['oscillation_reason'] = 'worsening'
                     break
                 
-                # Alternating pattern
+                # NEW: Check for alternating pattern (e.g., 3→5→3→5)
                 elif len(set(last_four)) == 2 and last_four[0] == last_four[2] and last_four[1] == last_four[3]:
                     if self.verbose:
                         print(f"⚠ Alternating pattern detected: {last_four}, stopping")
@@ -154,9 +158,10 @@ class ConceptSelfRefine:
                     break
             
             # Generate feedback
-            feedback = "\n".join(violations)
+            feedback = "
+".join(violations)
             
-            # Refine with LLM
+            # Refine concepts
             try:
                 refined_concepts = self.llm_refine_fn(current_concepts, feedback, concepts_dict)
                 
