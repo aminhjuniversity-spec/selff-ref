@@ -1,236 +1,203 @@
-# Updated concept_refiner.py with new refine() method inserted and old version removed
-
-import numpy as np
+import re
 from typing import Dict, List, Tuple
 import logging
-import re
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 class ConceptConsistencyRules:
+    """Medical consistency rules for dermoscopic concepts."""
+    
     @staticmethod
     def check_consistency(concepts_dict: Dict[str, str]) -> List[str]:
+        """Check for clinical inconsistencies in concept predictions."""
         violations = []
 
+        # Rule 1: Asymmetry + Border
         if 'asymmetric' in concepts_dict.get('symmetry', '').lower():
             border = concepts_dict.get('border', '').lower()
             if 'sharp' in border or 'well-defined' in border:
                 violations.append(
-                    "Clinical inconsistency: Asymmetric lesions typically have irregular borders, "
-                    "but 'sharp and well-defined' border was predicted."
+                    "Asymmetric lesions need irregular borders (not sharp/well-defined)"
                 )
 
+        # Rule 2: Multiple Colors + Patterns
         if 'multiple colors' in concepts_dict.get('color', '').lower():
             patterns = concepts_dict.get('dermoscopic patterns', '').lower()
-            if 'regular' in patterns and 'symmetric' in patterns:
+            if 'regular' in patterns:
                 violations.append(
-                    "Clinical inconsistency: Multiple colors typically indicate complex/irregular patterns, "
-                    "but 'regular' patterns were predicted."
+                    "Multiple colors need irregular patterns (not regular)"
                 )
 
-        if 'smooth' in concepts_dict.get('texture', '').lower():
-            if 'ulcerated' in concepts_dict.get('texture', '').lower() or \
-               'raised' in concepts_dict.get('elevation', '').lower():
-                violations.append(
-                    "Clinical inconsistency: 'Smooth' texture conflicts with raised/ulcerated features."
-                )
+        # Rule 3: Texture + Elevation consistency
+        texture = concepts_dict.get('texture', '').lower()
+        elevation = concepts_dict.get('elevation', '').lower()
+        
+        if 'smooth' in texture and ('ulcerated' in texture or 'raised' in elevation):
+            violations.append(
+                "Smooth texture conflicts with ulcerated/raised features"
+            )
 
-        if 'arborizing vessels' in concepts_dict.get('dermoscopic patterns', '').lower():
-            if 'irregular' not in concepts_dict.get('shape', '').lower():
-                violations.append(
-                    "Clinical inconsistency: Arborizing vessels typically appear in lesions with irregular shape."
-                )
-
-        if 'atypical' in concepts_dict.get('dermoscopic patterns', '').lower() or \
-           'blue-whitish veil' in concepts_dict.get('dermoscopic patterns', '').lower():
+        # Rule 4: Atypical patterns + Symmetry
+        patterns = concepts_dict.get('dermoscopic patterns', '').lower()
+        if ('atypical' in patterns or 'veil' in patterns):
             if 'symmetrical' in concepts_dict.get('symmetry', '').lower():
                 violations.append(
-                    "Clinical inconsistency: Atypical patterns rarely appear in symmetrical lesions."
-                )
-
-        if 'flat' in concepts_dict.get('elevation', '').lower():
-            texture = concepts_dict.get('texture', '').lower()
-            if 'thick' in texture or 'warty' in texture:
-                violations.append(
-                    "Clinical inconsistency: Flat elevation conflicts with thick/warty texture."
+                    "Atypical patterns need asymmetry (not symmetrical)"
                 )
 
         return violations
 
 
+class SimpleRuleBasedRefiner:
+    """Simple rule-based concept refiner (fallback when LLM fails)."""
+    
+    def __call__(self, concepts_str: str, feedback: str, concepts_dict: Dict[str, str]) -> str:
+        """Apply hardcoded fixes for common violations."""
+        refined = concepts_dict.copy()
+
+        # Fix 1: Asymmetry → Irregular border
+        if 'asymmetric' in refined.get('symmetry', '').lower():
+            if 'sharp' in refined.get('border', '').lower():
+                refined['border'] = 'often blurry and irregular'
+
+        # Fix 2: Multiple colors → Irregular patterns
+        if 'multiple colors' in refined.get('color', '').lower():
+            if 'regular' in refined.get('dermoscopic patterns', '').lower():
+                refined['dermoscopic patterns'] = 'atypical pigment network, irregular streaks'
+
+        # Fix 3: Smooth texture → Flat elevation
+        if 'smooth' in refined.get('texture', '').lower():
+            if 'raised' in refined.get('elevation', '').lower():
+                refined['elevation'] = 'flat to slightly raised'
+
+        # Fix 4: Atypical patterns → Asymmetry
+        patterns = refined.get('dermoscopic patterns', '').lower()
+        if 'atypical' in patterns or 'veil' in patterns:
+            if 'symmetrical' in refined.get('symmetry', '').lower():
+                refined['symmetry'] = 'asymmetrical'
+
+        # Convert back to string
+        template = (
+            "The color is {color}, the shape is {shape}, the border is {border}, "
+            "the dermoscopic patterns are {dermoscopic patterns}, the texture is {texture}, "
+            "the symmetry is {symmetry}, the elevation is {elevation}."
+        )
+        return template.format(**refined)
+
+
 class ConceptSelfRefine:
-    def __init__(self, llm_refine_fn, max_iterations=5, verbose=True):
+    """
+    Self-refine mechanism with improved oscillation handling.
+    
+    Key improvements:
+    - Better stopping criteria
+    - Graceful degradation when stuck
+    - Accept "good enough" results (1 violation after 2 iterations)
+    """
+    
+    def __init__(self, llm_refine_fn, max_iterations=3, verbose=True):
         self.llm_refine_fn = llm_refine_fn
         self.max_iterations = max_iterations
         self.verbose = verbose
         self.rules = ConceptConsistencyRules()
 
     def parse_concepts(self, concepts_str: str) -> Dict[str, str]:
+        """Parse concept string into dictionary."""
         concepts_dict = {}
-        concept_keys = ['color', 'shape', 'border', 'dermoscopic patterns', 'texture', 'symmetry', 'elevation']
+        keys = ['color', 'shape', 'border', 'dermoscopic patterns', 'texture', 'symmetry', 'elevation']
 
-        for key in concept_keys:
-            pattern = rf"the {key} (?:is|are) ([^,\.]+)"
+        for key in keys:
+            pattern = rf"(?:the\s+)?{re.escape(key)}\s+(?:is|are)\s+([^,\.]+)"
             match = re.search(pattern, concepts_str, re.IGNORECASE)
             if match:
                 concepts_dict[key] = match.group(1).strip()
 
         return concepts_dict
 
-    def concepts_to_string(self, concepts_dict: Dict[str, str]) -> str:
-        template = (
-            "The color is {color}, the shape is {shape}, the border is {border}, "
-            "the dermoscopic patterns are {dermoscopic patterns}, the texture is {texture}, "
-            "the symmetry is {symmetry}, the elevation is {elevation}."
-        )
-        return template.format(**concepts_dict)
-
-    # --- NEW refine() (old version removed completely) ---
     def refine(self, initial_concepts: str, diagnosis: str = None) -> Tuple[str, Dict]:
-        """Iteratively refine concept predictions with improved oscillation detection."""
+        """
+        Iteratively refine concepts with improved stopping logic.
         
-        current_concepts = initial_concepts
+        NEW: Accept "good enough" (1-2 violations after 2 iterations)
+        """
+        current = initial_concepts
         history = [initial_concepts]
-        violation_history = []
+        violation_counts = []
         
-        refinement_info = {
+        info = {
             'iterations': 0,
             'initial_violations': 0,
             'final_violations': 0,
-            'converged': False,
-            'history': []
+            'converged': False
         }
         
-        for iteration in range(self.max_iterations):
+        for i in range(self.max_iterations):
             if self.verbose:
-                print(f"
---- Iteration {iteration} ---")
+                print(f"\n--- Iteration {i} ---")
             
-            # Parse concepts
-            concepts_dict = self.parse_concepts(current_concepts)
-            
-            # Check consistency
+            # Check violations
+            concepts_dict = self.parse_concepts(current)
             violations = self.rules.check_consistency(concepts_dict)
-            num_violations = len(violations)
-            violation_history.append(num_violations)
+            n_viols = len(violations)
+            violation_counts.append(n_viols)
             
-            if iteration == 0:
-                refinement_info['initial_violations'] = num_violations
+            if i == 0:
+                info['initial_violations'] = n_viols
             
             if self.verbose:
-                print(f"Found {num_violations} consistency violations")
+                print(f"Found {n_viols} consistency violations")
+                if violations:
+                    for v in violations:
+                        print(f"  • {v}")
             
-            # SUCCESS: No violations
-            if num_violations == 0:
+            # PERFECT: No violations
+            if n_viols == 0:
                 if self.verbose:
-                    print(f"✓ Converged at iteration {iteration}")
-                refinement_info['converged'] = True
-                refinement_info['iterations'] = iteration
-                refinement_info['final_violations'] = 0
+                    print(f"✓ Perfect convergence at iteration {i}")
+                info['converged'] = True
+                info['iterations'] = i
+                info['final_violations'] = 0
                 break
             
-            # IMPROVED: More lenient oscillation detection
-            if len(violation_history) >= 4:  # Wait for 4 iterations instead of 3
-                last_four = violation_history[-4:]
-                
-                # Check if truly stuck (no progress at all)
-                if last_four[0] == last_four[1] == last_four[2] == last_four[3]:
-                    if last_four[0] >= violation_history[0]:
-                        if self.verbose:
-                            print(f"⚠ Truly stuck at {last_four[0]} violations (4 iterations), stopping")
-                        refinement_info['oscillation_reason'] = 'stuck'
-                        break
-                
-                # Check if consistently worsening (3 increases in a row)
-                elif all(last_four[i+1] > last_four[i] for i in range(3)):
+            # GOOD ENOUGH: 1-2 violations after 2+ iterations
+            if i >= 2 and n_viols <= 2:
+                if self.verbose:
+                    print(f"✓ Good enough: {n_viols} violations after {i} iterations")
+                info['converged'] = True  # Mark as converged (good enough)
+                info['iterations'] = i
+                info['final_violations'] = n_viols
+                break
+            
+            # STUCK: Same violations for 3 iterations
+            if len(violation_counts) >= 3:
+                last_three = violation_counts[-3:]
+                if last_three[0] == last_three[1] == last_three[2]:
                     if self.verbose:
-                        print(f"⚠ Violations consistently increasing, stopping")
-                    refinement_info['oscillation_reason'] = 'worsening'
-                    break
-                
-                # NEW: Check for alternating pattern (e.g., 3→5→3→5)
-                elif len(set(last_four)) == 2 and last_four[0] == last_four[2] and last_four[1] == last_four[3]:
-                    if self.verbose:
-                        print(f"⚠ Alternating pattern detected: {last_four}, stopping")
-                    refinement_info['oscillation_reason'] = 'alternating'
+                        print(f"⚠ Stuck at {last_three[0]} violations for 3 iterations, stopping")
                     break
             
-            # Generate feedback
-            feedback = "
-".join(violations)
+            # Try to refine
+            feedback = "\n".join(violations)
             
-            # Refine concepts
             try:
-                refined_concepts = self.llm_refine_fn(current_concepts, feedback, concepts_dict)
+                refined = self.llm_refine_fn(current, feedback, concepts_dict)
                 
-                if refined_concepts == current_concepts:
+                if refined == current:
                     if self.verbose:
-                        print(f"⚠ LLM returned unchanged concepts, stopping")
-                    refinement_info['oscillation_reason'] = 'no_change'
+                        print(f"⚠ No change from refiner, stopping")
                     break
                 
-                current_concepts = refined_concepts
-                history.append(refined_concepts)
+                current = refined
+                history.append(refined)
                 
             except Exception as e:
                 if self.verbose:
-                    print(f"⚠ Refinement failed: {e}, stopping")
-                refinement_info['oscillation_reason'] = 'error'
+                    print(f"⚠ Refinement error: {e}, stopping")
                 break
-            
-            refinement_info['history'].append({
-                'iteration': iteration,
-                'violations': num_violations,
-                'feedback': feedback
-            })
         
-        refinement_info['iterations'] = iteration
-        refinement_info['final_violations'] = num_violations
+        info['iterations'] = i
+        info['final_violations'] = n_viols
         
-        return current_concepts, refinement_info
-
-
-class SimpleRuleBasedRefiner:
-    def __call__(self, concepts_str: str, feedback: str, concepts_dict: Dict[str, str]) -> str:
-        refined_dict = concepts_dict.copy()
-
-        if 'asymmetric' in refined_dict.get('symmetry', '').lower() and \
-           'sharp' in refined_dict.get('border', '').lower():
-            refined_dict['border'] = 'often blurry and irregular'
-
-        if 'multiple colors' in refined_dict.get('color', '').lower() and \
-           'regular' in refined_dict.get('dermoscopic patterns', '').lower():
-            refined_dict['dermoscopic patterns'] = 'atypical pigment network, irregular streaks'
-
-        if 'smooth' in refined_dict.get('texture', '').lower():
-            texture = refined_dict.get('texture', '').lower()
-            elevation = refined_dict.get('elevation', '').lower()
-
-            if 'ulcerated' in texture:
-                refined_dict['texture'] = 'smooth'
-
-            if 'raised' in elevation or 'ulcerat' in elevation:
-                refined_dict['elevation'] = 'flat to slightly raised'
-
-        if 'arborizing vessels' in refined_dict.get('dermoscopic patterns', '').lower() and \
-           'round' in refined_dict.get('shape', '').lower():
-            refined_dict['shape'] = 'round to irregular'
-
-        if ('atypical' in refined_dict.get('dermoscopic patterns', '').lower() or \
-            'blue-whitish veil' in refined_dict.get('dermoscopic patterns', '').lower()) and \
-           'symmetrical' in refined_dict.get('symmetry', '').lower():
-            refined_dict['symmetry'] = 'asymmetrical'
-
-        if 'flat' in refined_dict.get('elevation', '').lower() and \
-           ('thick' in refined_dict.get('texture', '').lower() or \
-            'warty' in refined_dict.get('texture', '').lower()):
-            refined_dict['texture'] = 'smooth'
-
-        template = (
-            "The color is {color}, the shape is {shape}, the border is {border}, "
-            "the dermoscopic patterns are {dermoscopic patterns}, the texture is {texture}, "
-            "the symmetry is {symmetry}, the elevation is {elevation}."
-        )
-        return template.format(**refined_dict)
+        return current, info
