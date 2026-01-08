@@ -290,7 +290,7 @@ class Explicd:
 
 if __name__ == "__main__":
     """
-        DEBUG
+        DEBUG - FIXED VERSION
     """
     parser = OptionParser()
     parser.add_option('-e', '--epochs', dest='epochs', default=150, type='int',
@@ -304,7 +304,6 @@ if __name__ == "__main__":
     parser.add_option('-c', '--resume', type='str', dest='load', default=False,
             help='load pretrained model')
     parser.add_option('-p', '--checkpoint-path', type='str', dest='cp_path',
-            #default='/data/yunhe/Liver/auto-aug/checkpoint/', help='checkpoint path')
             default='./checkpoint/', help='checkpoint path')
     parser.add_option('-o', '--log-path', type='str', dest='log_path', 
             default='./log/', help='log path')
@@ -314,46 +313,64 @@ if __name__ == "__main__":
     parser.add_option('-d', '--dataset', type='str', dest='dataset', 
             default='isic2018', help='name of dataset')
     parser.add_option('--data-path', type='str', dest='data_path', 
-            default='/data/local/yg397/dataset/isic2018/', help='the path of the dataset')
+            default='./images', help='the path of the dataset')  # ← CHANGED TO YOUR PATH
     parser.add_option('-u', '--unique_name', type='str', dest='unique_name',
             default='test', help='name prefix')
-     
-
     parser.add_option('--flag', type='int', dest='flag', default=2)
-
-    parser.add_option('--gpu', type='str', dest='gpu',
-            default='0')
+    parser.add_option('--gpu', type='str', dest='gpu', default='0')
     parser.add_option('--amp', action='store_true', help='if use mixed precision training')
 
     (config, args) = parser.parse_args()
     
     os.environ['CUDA_VISIBLE_DEVICES'] = config.gpu
-
     config.log_path = config.log_path + config.dataset + '/'
     config.cp_path = config.cp_path + config.dataset + '/'
     
     print('use model:', config.model)
     
-    num_class_dict = {
-        'isic2018': 7,
-    }
-
-    cls_weight_dict = {
-        'isic2018': [1, 0.5, 1.2, 1.3, 1, 2, 2], 
-    }
+    num_class_dict = {'isic2018': 7}
+    cls_weight_dict = {'isic2018': [1, 0.5, 1.2, 1.3, 1, 2, 2]}
     
     config.cls_weight = cls_weight_dict[config.dataset]
     config.num_class = num_class_dict[config.dataset]
     
     model = Explicd(config=config)
 
-    val_transforms = copy.deepcopy(config.preprocess)
-    val_transforms.transforms.insert(0, transforms.ToPILImage())
+    # ========== NEW: ROBUST IMAGE FINDER ==========
+    def find_image(filename_base, search_base="./images"):
+        """Handles flat files AND subfolders like NML/"""
+        for ext in ['.jpg', '.JPG']:
+            path = os.path.join(search_base, f"{filename_base}{ext}")
+            if os.path.exists(path):
+                return path
+        
+        # Try subfolder (first 3 chars)
+        subfolder = filename_base[:3].upper()
+        subfolder_path = os.path.join(search_base, subfolder)
+        if os.path.exists(subfolder_path) and os.path.isdir(subfolder_path):
+            for ext in ['.JPG', '.jpg']:
+                path = os.path.join(subfolder_path, f"{filename_base}{ext}")
+                if os.path.exists(path):
+                    return path
+        return None
 
-    batch = {
-        "data": val_transforms(np.asarray(Image.open("data/Derm7pt/images/Nfl040.jpg"))).unsqueeze(dim=0),
-        "img_id": "Nfl040",
-        "class_label": torch.tensor([0])
-    }
+    # Test Adl313 (exists in your flat dir)
+    test_img_id = "Adl313"
+    img_path = find_image(test_img_id)
+    
+    if img_path:
+        print(f"✅ Found: {img_path}")
+        batch = {
+            "img_path": [img_path],  # ← EXPLICD NEEDS THIS FORMAT
+            "img_id": [test_img_id],
+            "class_label": [0]
+        }
+        template = model.get_concept_predictions(batch=batch)
+        print("✅ SUCCESS!")
+        print("Concepts:", template)
+    else:
+        print(f"❌ {test_img_id} not found. Showing first 5 files:")
+        for f in os.listdir("./images")[:5]:
+            print(f"  - {f}")
+    # =============================================
 
-    template = model.get_concept_predictions(batch=batch)
